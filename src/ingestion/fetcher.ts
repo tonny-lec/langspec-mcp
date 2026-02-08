@@ -2,26 +2,37 @@ import { load } from 'cheerio';
 import type { FetchResult } from '../types.js';
 import type { DocConfig } from '../config/languages.js';
 import { createLogger } from '../lib/logger.js';
+import { withRetry, FetchError, parseRetryAfter } from '../lib/retry.js';
 
 const log = createLogger('Fetcher');
 const USER_AGENT = 'langspec-mcp/1.0 (Language Specification Indexer)';
+const FETCH_TIMEOUT_MS = 30_000;
 
-function delay(ms: number): Promise<void> {
+export function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 async function fetchUrl(url: string): Promise<{ body: string; etag: string | null }> {
-  const response = await fetch(url, {
-    headers: { 'User-Agent': USER_AGENT },
+  return withRetry(async () => {
+    const response = await fetch(url, {
+      headers: { 'User-Agent': USER_AGENT },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+
+    if (!response.ok) {
+      const retryAfter = parseRetryAfter(response.headers.get('retry-after'));
+      throw new FetchError(
+        `Failed to fetch ${url}: ${response.status} ${response.statusText}`,
+        url,
+        response.status,
+        retryAfter,
+      );
+    }
+
+    const body = await response.text();
+    const etag = response.headers.get('etag');
+    return { body, etag };
   });
-
-  if (!response.ok) {
-    throw new Error(`Failed to fetch ${url}: ${response.status} ${response.statusText}`);
-  }
-
-  const body = await response.text();
-  const etag = response.headers.get('etag');
-  return { body, etag };
 }
 
 async function fetchSingleHtml(config: DocConfig): Promise<FetchResult[]> {
