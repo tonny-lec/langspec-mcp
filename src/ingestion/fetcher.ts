@@ -1,5 +1,5 @@
 import { load } from 'cheerio';
-import type { FetchResult } from '../types.js';
+import type { FetchResult, FetchOutcome, FetchError as FetchErrorType } from '../types.js';
 import type { DocConfig } from '../config/languages.js';
 import { createLogger } from '../lib/logger.js';
 import { withRetry, FetchError, parseRetryAfter } from '../lib/retry.js';
@@ -81,7 +81,7 @@ async function fetchWithCache(
   return result;
 }
 
-async function fetchSingleHtml(config: DocConfig, snapshotEtag?: string, ctx?: CacheContext): Promise<FetchResult[]> {
+async function fetchSingleHtml(config: DocConfig, snapshotEtag?: string, ctx?: CacheContext): Promise<FetchOutcome> {
   const url = config.url!;
   log.info('Fetching', { url });
   // For single-html, prefer snapshot ETag from DB, but also check cache
@@ -94,20 +94,32 @@ async function fetchSingleHtml(config: DocConfig, snapshotEtag?: string, ctx?: C
       const cached = ctx.cache.getContent(ctx.language, ctx.doc, url);
       if (cached != null) {
         log.info('Not modified, serving from cache', { url });
-        return [{ html: cached, etag, url, status: 304 }];
+        return {
+          results: [{ html: cached, etag, url, status: 304 }],
+          errors: [],
+          summary: { total: 1, fetched: 0, cached: 1, failed: 0 },
+        };
       }
     }
     log.info('Not modified, skipping', { url });
-    return [{ html: '', etag, url, status: 304 }];
+    return {
+      results: [{ html: '', etag, url, status: 304 }],
+      errors: [],
+      summary: { total: 1, fetched: 0, cached: 1, failed: 0 },
+    };
   }
   if (ctx && body) {
     ctx.cache.put(ctx.language, ctx.doc, url, body, etag);
   }
   log.info('Fetched', { url, bytes: body!.length, etag: etag ?? 'none' });
-  return [{ html: body!, etag, url, status: 200 }];
+  return {
+    results: [{ html: body!, etag, url, status: 200 }],
+    errors: [],
+    summary: { total: 1, fetched: 1, cached: 0, failed: 0 },
+  };
 }
 
-async function fetchMultiHtmlToc(config: DocConfig, ctx?: CacheContext): Promise<FetchResult[]> {
+async function fetchMultiHtmlToc(config: DocConfig, ctx?: CacheContext): Promise<FetchOutcome> {
   const indexUrl = config.indexUrl!;
   const baseUrl = indexUrl.replace(/\/[^/]*$/, '');
 
@@ -130,15 +142,31 @@ async function fetchMultiHtmlToc(config: DocConfig, ctx?: CacheContext): Promise
   log.info('Found chapters', { count: chapterLinks.length });
 
   const results: FetchResult[] = [];
-  for (const link of chapterLinks) {
+  const errors: FetchErrorType[] = [];
+  let fetched = 0, cached = 0;
+
+  for (let i = 0; i < chapterLinks.length; i++) {
+    const link = chapterLinks[i];
     const chapterUrl = `${baseUrl}/${link}`;
-    log.debug('Fetching chapter', { file: link });
-    const result = await fetchWithCache(chapterUrl, ctx);
-    results.push({ html: result.body ?? '', etag: result.etag, url: chapterUrl, pageUrl: chapterUrl, status: result.status });
+    try {
+      log.debug('Fetching chapter', { file: link, progress: `${i + 1}/${chapterLinks.length}` });
+      const result = await fetchWithCache(chapterUrl, ctx);
+      if (result.status === 304) cached++;
+      else fetched++;
+      results.push({ html: result.body ?? '', etag: result.etag, url: chapterUrl, pageUrl: chapterUrl, status: result.status });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log.warn('Failed to fetch page, continuing', { url: chapterUrl, error: msg });
+      errors.push({ url: chapterUrl, error: msg });
+    }
     await delay(200);
   }
 
-  return results;
+  return {
+    results,
+    errors,
+    summary: { total: chapterLinks.length, fetched, cached, failed: errors.length },
+  };
 }
 
 export function parseSummaryMd(markdown: string, basePath: string): string[] {
@@ -159,7 +187,7 @@ export function parseSummaryMd(markdown: string, basePath: string): string[] {
   return files;
 }
 
-async function fetchGithubMarkdown(config: DocConfig, ctx?: CacheContext): Promise<FetchResult[]> {
+async function fetchGithubMarkdown(config: DocConfig, ctx?: CacheContext): Promise<FetchOutcome> {
   const { githubOwner, githubRepo, githubPath, manifestFile } = config;
   const rawBase = `https://raw.githubusercontent.com/${githubOwner}/${githubRepo}/HEAD`;
   const basePath = githubPath ?? '';
@@ -186,21 +214,37 @@ async function fetchGithubMarkdown(config: DocConfig, ctx?: CacheContext): Promi
   }
 
   const results: FetchResult[] = [];
-  for (const filePath of mdFiles) {
+  const errors: FetchErrorType[] = [];
+  let fetched = 0, cached = 0;
+
+  for (let i = 0; i < mdFiles.length; i++) {
+    const filePath = mdFiles[i];
     const fileUrl = `${rawBase}/${filePath}`;
-    log.debug('Fetching', { file: filePath });
-    const result = await fetchWithCache(fileUrl, ctx);
-    results.push({
-      html: result.body ?? '',
-      etag: result.etag,
-      url: fileUrl,
-      pageUrl: filePath,
-      status: result.status,
-    });
+    try {
+      log.debug('Fetching', { file: filePath, progress: `${i + 1}/${mdFiles.length}` });
+      const result = await fetchWithCache(fileUrl, ctx);
+      if (result.status === 304) cached++;
+      else fetched++;
+      results.push({
+        html: result.body ?? '',
+        etag: result.etag,
+        url: fileUrl,
+        pageUrl: filePath,
+        status: result.status,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log.warn('Failed to fetch page, continuing', { url: fileUrl, error: msg });
+      errors.push({ url: fileUrl, error: msg });
+    }
     await delay(100);
   }
 
-  return results;
+  return {
+    results,
+    errors,
+    summary: { total: mdFiles.length, fetched, cached, failed: errors.length },
+  };
 }
 
 export interface FetchSpecOptions {
@@ -209,7 +253,7 @@ export interface FetchSpecOptions {
   language?: string;
 }
 
-export async function fetchSpec(config: DocConfig, opts: FetchSpecOptions = {}): Promise<FetchResult[]> {
+export async function fetchSpec(config: DocConfig, opts: FetchSpecOptions = {}): Promise<FetchOutcome> {
   const ctx = opts.cache && opts.language ? {
     cache: opts.cache,
     language: opts.language,
@@ -230,12 +274,12 @@ export async function fetchSpec(config: DocConfig, opts: FetchSpecOptions = {}):
 
 // Backward compatibility
 export async function fetchGoSpec(): Promise<FetchResult> {
-  const results = await fetchSingleHtml({
+  const outcome = await fetchSingleHtml({
     doc: 'go-spec',
     displayName: 'Go Spec',
     fetchStrategy: 'single-html',
     url: 'https://go.dev/ref/spec',
     sourcePolicy: 'excerpt_only',
   });
-  return results[0];
+  return outcome.results[0];
 }
