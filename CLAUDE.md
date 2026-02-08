@@ -94,6 +94,17 @@ src/
 - 429 受信時にバッチ内の `delayMs` を動的に増加
 - `Retry-After` ヘッダー値を使用、無ければ倍増（上限 10 秒）
 
+## Documentation
+`docs/` にアーキテクチャ解説ドキュメント（日本語）を格納。初心者向けに設計〜実装を7章構成で解説。
+- `docs/README.md` — 目次・読み方ガイド・全体図
+- `docs/01-overview.md` — MCP概要と2つのコマンド
+- `docs/02-typescript-basics.md` — TS プロジェクト構成・ビルド
+- `docs/03-config.md` — 言語設定レジストリ・FetchStrategy
+- `docs/04-ingestion-pipeline.md` — 取り込みパイプライン全工程
+- `docs/05-database.md` — SQLite + FTS5 設計
+- `docs/06-mcp-server.md` — MCPサーバ・ツール実装
+- `docs/07-reliability.md` — ログ・リトライ・キャッシュ・レート制限
+
 ## Build & Run
 ```bash
 npm run build                              # TypeScript compile
