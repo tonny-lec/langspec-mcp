@@ -17,13 +17,25 @@ export async function ingestSpec(db: Database.Database, language: string): Promi
   const queries = new DatabaseQueries(db);
   const version = `snapshot-${new Date().toISOString().split('T')[0].replace(/-/g, '')}`;
 
-  // 1. Fetch all pages
-  const fetchResults = await fetchSpec(docConfig);
+  // 1. Get previous ETag for conditional request (single-html only)
+  const previousSnapshot = queries.getLatestSnapshot(language, docConfig.doc);
+  const snapshotEtag = previousSnapshot?.etag ?? undefined;
+
+  // 2. Fetch all pages
+  const fetchResults = await fetchSpec(docConfig, snapshotEtag);
   log.info('Fetched pages', { count: fetchResults.length });
 
-  // 2. Parse + normalize all pages
+  // Check if all results are 304 (no changes)
+  const allUnchanged = fetchResults.every(r => r.status === 304);
+  if (allUnchanged) {
+    log.info('No changes detected (all 304), skipping parse and persist');
+    return;
+  }
+
+  // 3. Parse + normalize pages with new content
   const allNormalized: import('../types.js').NormalizedSection[] = [];
   for (const result of fetchResults) {
+    if (result.status === 304) continue;
     const parsedSections = parseSpec(result.html, docConfig, result.pageUrl);
     const normalized = normalizeSections(parsedSections, {
       language,
