@@ -2,56 +2,103 @@
 
 ## Overview
 プログラミング言語仕様をインデックス化し、MCP経由で検索・引用を提供するサーバ。
-Milestone 1: Go仕様 + stdio MCPサーバ + SQLite/FTS5。
+- **M1完了**: Go仕様 + stdio MCPサーバ + SQLite/FTS5
+- **M2完了**: Citation precision (diff re-index, source_policy, snippet, section_id stability)
+- **M3完了**: build_learning_plan tool (週間学習プラン自動生成)
+- 162セクション indexed、5 MCP tools稼働
+- **次**: M4 (多言語対応)
 
 ## Tech Stack
-- TypeScript (ES modules, `"type": "module"`)
+- TypeScript (ES modules, `"type": "module"`, `"module": "Node16"`)
 - `@modelcontextprotocol/sdk` v1.26.0 (Server + setRequestHandler)
 - `better-sqlite3` + FTS5
-- `cheerio` (HTML解析)
+- `cheerio` v1.x (HTML解析 — `Element`型は未export、`elem.tagName`直接参照)
 - `zod` (入力バリデーション)
 - stdio トランスポート
 
 ## Critical Rules
-- **`console.log` 厳禁** — stdio MCPサーバではstdoutがJSON-RPC通信に使われる。ログは必ず `console.error` を使う
+- **`console.log` 厳禁** — stdoutはJSON-RPC通信専用。ログは `console.error` のみ
 - **Tool結果は `{ content: [{ type: "text", text: JSON.stringify(data) }] }` 形式**
-- **FTS5同期はトリガーで自動化** — sections テーブルへのINSERT/UPDATE/DELETEで fts_sections が自動更新される
+- **FTS5同期はトリガーで自動化** — INSERT/UPDATE/DELETEで fts_sections が自動更新
+- **差分更新は `content_hash` 比較** — upsert前にハッシュ比較、変更時のみ更新
 
 ## File Structure
 ```
 src/
-├── index.ts             # CLI: ingest / serve
+├── index.ts             # CLI: ingest / serve (--language flag)
 ├── server.ts            # MCP Server + tool registration
 ├── types.ts             # TypeScript types + Zod schemas
 ├── db/
 │   ├── schema.ts        # DB init + migrations
-│   └── queries.ts       # Query methods (DatabaseQueries class)
+│   └── queries.ts       # DatabaseQueries + extractRelevantSnippet()
 ├── ingestion/
-│   ├── index.ts         # Pipeline orchestrator
+│   ├── index.ts         # Pipeline orchestrator (diff report)
 │   ├── fetcher.ts       # HTTP fetch with ETag
-│   ├── parser.ts        # HTML → Section[] (cheerio)
-│   └── normalizer.ts    # Normalize + excerpt generation
+│   ├── parser.ts        # HTML → Section[] (cheerio, stableId fallback)
+│   └── normalizer.ts    # Normalize + sourcePolicy + excerpt
 └── tools/
     ├── list-languages.ts
     ├── list-versions.ts
     ├── search-spec.ts
-    └── get-section.ts
+    ├── get-section.ts
+    └── build-learning-plan.ts
 ```
 
 ## Key Patterns
-- DB path: `data/langspec.db` (relative to project root)
-- Version format: `snapshot-YYYYMMDD`
-- Excerpt max: 1200 chars
-- FTS5 BM25 weights: title=10, section_path=5, content=1
-- Citation format: language, doc, version, section_id, title, section_path, url, snippet
+
+### Diff-based Re-index
+- `content_hash` (SHA-256) で各セクションの変更を検出
+- upsert結果: `inserted` / `updated` / `unchanged` で差分レポート出力
+
+### Section ID Stability
+- HTML見出しに `id` 属性がある場合はそのまま使用
+- `id` 無しの見出しには `stableId` (テキストベースのハッシュ) でフォールバック
+
+### Snippet Extraction
+- FTS5 content-sync mode では `snippet()` 関数が使用不可
+- `extractRelevantSnippet()`: クエリトークンの初出位置を中心にウィンドウ抽出
+
+### Source Policy
+- `normalizer.ts` で言語ごとの正規化ルール (URL構築、メタデータ付与) を管理
 
 ## Build & Run
 ```bash
-npm run build          # TypeScript compile
-npm run ingest         # Fetch & index Go spec
-npm run serve          # Start MCP server (stdio)
+npm run build                    # TypeScript compile
+npm run ingest                   # Fetch & index Go spec
+npm run ingest -- --language go  # Language指定
+npm run serve                    # Start MCP server (stdio)
 ```
+
+## Roadmap
+- **M4**: Java (JLS/JVMS), Rust, TypeScript 言語追加
+- **M5**: Non-functional (caching, rate limiting, observability)
 
 ## Commit Convention
 - feat: / fix: / refactor: / docs: / test: prefix
 - 日本語OK、ただしコミットメッセージは英語
+
+## Git Workflow
+
+### Git Flow ブランチモデル
+- **`main`** — 本番リリース用。直接コミット禁止
+- **`develop`** — 統合ブランチ。feature ブランチのマージ先
+- **`feature/<issue番号>-<slug>`** — 機能開発。develop から分岐、develop へマージ
+- **`release/<version>`** — リリース準備。develop → main へマージ
+- **`hotfix/<slug>`** — 緊急修正。main から分岐、main + develop へマージ
+
+### 開発フロー
+1. **Plan mode** で計画立案 → タスクごとに GitHub Issue を作成 (`github-issues` スキル or `refine-issue` エージェント)
+2. **Issue ごとに feature ブランチ作成** — `git-flow-manager` エージェントを使用
+3. **実装 → テスト → コミット** — develop へ PR 作成
+4. **PR マージ** — squash or merge commit
+
+### スキル/エージェント使い分け
+- **`git-advanced-workflows` スキル** — rebase, cherry-pick, bisect, worktree, reflog 等の高度なGit操作時に参照
+- **`git-flow-manager` エージェント** — feature/release/hotfix ブランチの作成・マージ・PR生成時に使用 (Task tool, subagent_type=git-flow-manager)
+- **`github-issues` スキル** — Issue 作成・更新・ラベル管理
+- **`refine-issue` エージェント** — 要件を AC/技術考慮/エッジケース/NFR に整理
+
+### トリガー
+- PreToolUse フック (`git-skill-reminder.sh`) が git コマンドを検出し、適切なスキル/エージェントの使用をリマインド
+- ブランチ作成・マージ → git-flow-manager
+- rebase/cherry-pick/bisect/stash/reflog → git-advanced-workflows

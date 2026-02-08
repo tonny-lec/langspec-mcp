@@ -1,24 +1,30 @@
 import { load } from 'cheerio';
+import { createHash } from 'node:crypto';
 import type { ParsedSection } from '../types.js';
 
-export function parseGoSpec(html: string): ParsedSection[] {
+function stableId(baseUrl: string, headingText: string, index: number): string {
+  const input = `${baseUrl}|${headingText}|${index}`;
+  return 'gen-' + createHash('sha256').update(input).digest('hex').substring(0, 12);
+}
+
+export function parseGoSpec(html: string, baseUrl: string = ''): ParsedSection[] {
   const $ = load(html);
   const sections: ParsedSection[] = [];
 
   // Track heading hierarchy for section_path
   const pathStack: Array<{ level: number; title: string }> = [];
 
-  // Collect all headings with IDs
-  const headings = $('h2[id], h3[id], h4[id]');
+  // Collect all headings (with or without IDs)
+  const headings = $('h2[id], h3[id], h4[id], h2:not([id]), h3:not([id]), h4:not([id])');
 
-  headings.each((_i, elem) => {
+  headings.each((i, elem) => {
     const $heading = $(elem);
-    const sectionId = $heading.attr('id');
-    if (!sectionId) return;
-
     const title = $heading.text().trim();
     const tagName = elem.tagName.toLowerCase();
     const level = parseInt(tagName.substring(1), 10);
+
+    // Use existing ID or generate a stable one
+    const sectionId = $heading.attr('id') || stableId(baseUrl, title, i);
 
     // Update path stack: pop entries at same or deeper level
     while (pathStack.length > 0 && pathStack[pathStack.length - 1].level >= level) {

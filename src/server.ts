@@ -10,11 +10,13 @@ import {
   ListVersionsInputSchema,
   SearchSpecInputSchema,
   GetSectionInputSchema,
+  BuildLearningPlanInputSchema,
 } from './types.js';
 import { listLanguages } from './tools/list-languages.js';
 import { listVersions } from './tools/list-versions.js';
 import { searchSpec } from './tools/search-spec.js';
 import { getSection } from './tools/get-section.js';
+import { buildLearningPlan } from './tools/build-learning-plan.js';
 
 export async function startServer(db: Database.Database): Promise<void> {
   const server = new Server(
@@ -33,6 +35,12 @@ export async function startServer(db: Database.Database): Promise<void> {
           properties: {},
           additionalProperties: false,
         },
+        annotations: {
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
       },
       {
         name: 'list_versions',
@@ -48,6 +56,12 @@ export async function startServer(db: Database.Database): Promise<void> {
           },
           required: ['language'],
           additionalProperties: false,
+        },
+        annotations: {
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
         },
       },
       {
@@ -76,6 +90,12 @@ export async function startServer(db: Database.Database): Promise<void> {
           required: ['query', 'language'],
           additionalProperties: false,
         },
+        annotations: {
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
       },
       {
         name: 'get_section',
@@ -93,6 +113,46 @@ export async function startServer(db: Database.Database): Promise<void> {
           },
           required: ['language', 'version', 'section_id'],
           additionalProperties: false,
+        },
+        annotations: {
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
+      },
+      {
+        name: 'build_learning_plan',
+        description: 'Generate a weekly learning plan from the specification table of contents. Distributes sections into balanced weeks by content volume.',
+        inputSchema: {
+          type: 'object' as const,
+          properties: {
+            language: {
+              type: 'string',
+              enum: ['go', 'java', 'rust', 'typescript'],
+              description: 'Programming language',
+            },
+            version: { type: 'string', description: 'Spec version (optional, defaults to latest)' },
+            total_weeks: {
+              type: 'number',
+              minimum: 1,
+              maximum: 12,
+              description: 'Number of weeks for the plan (default: 4)',
+            },
+            focus_areas: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Topic names to prioritize (e.g. ["Types", "Expressions"])',
+            },
+          },
+          required: ['language'],
+          additionalProperties: false,
+        },
+        annotations: {
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
         },
       },
     ],
@@ -125,6 +185,12 @@ export async function startServer(db: Database.Database): Promise<void> {
         case 'get_section': {
           const params = GetSectionInputSchema.parse(args);
           const result = getSection(db, params);
+          return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+        }
+
+        case 'build_learning_plan': {
+          const params = BuildLearningPlanInputSchema.parse(args);
+          const result = buildLearningPlan(db, params);
           return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
         }
 
