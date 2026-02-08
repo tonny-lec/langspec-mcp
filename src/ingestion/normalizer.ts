@@ -9,6 +9,7 @@ export function normalizeSections(
     version: string;
     baseUrl: string;
     sourcePolicy?: string;
+    pageUrlPrefix?: string;
   },
 ): NormalizedSection[] {
   const policy = meta.sourcePolicy ?? 'excerpt_only';
@@ -19,6 +20,8 @@ export function normalizeSections(
       ? fulltext.substring(0, EXCERPT_MAX_LENGTH) + '...'
       : fulltext;
 
+    const canonicalUrl = buildCanonicalUrl(meta.baseUrl, s.section_id, s.pageUrl, meta.pageUrlPrefix);
+
     return {
       language: meta.language,
       doc: meta.doc,
@@ -26,11 +29,36 @@ export function normalizeSections(
       section_id: s.section_id,
       title: s.title,
       section_path: s.section_path,
-      canonical_url: `${meta.baseUrl}#${s.section_id}`,
+      canonical_url: canonicalUrl,
       excerpt,
       fulltext,
       content_hash: hashContent(fulltext),
       source_policy: policy,
     };
   });
+}
+
+function buildCanonicalUrl(baseUrl: string, sectionId: string, pageUrl?: string, pageUrlPrefix?: string): string {
+  if (!pageUrl) {
+    // Single-page: baseUrl#sectionId (Go)
+    return `${baseUrl}#${sectionId}`;
+  }
+
+  // Multi-page HTML: pageUrl#sectionId (Java)
+  if (pageUrl.startsWith('http')) {
+    return `${pageUrl}#${sectionId}`;
+  }
+
+  // GitHub Markdown: derive canonical from baseUrl + page path
+  // Strip known prefix (e.g., "src/" or "packages/documentation/copy/en/handbook-v2/")
+  let pageName = pageUrl;
+  if (pageUrlPrefix) {
+    const prefix = pageUrlPrefix.endsWith('/') ? pageUrlPrefix : pageUrlPrefix + '/';
+    if (pageName.startsWith(prefix)) {
+      pageName = pageName.slice(prefix.length);
+    }
+  }
+  pageName = pageName.replace(/\.md$/, '');
+
+  return `${baseUrl}/${pageName}.html#${sectionId}`;
 }
