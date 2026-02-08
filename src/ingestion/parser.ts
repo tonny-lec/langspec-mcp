@@ -85,11 +85,12 @@ interface FrontMatter {
 }
 
 function parseFrontMatter(content: string): { frontMatter: FrontMatter; body: string } {
-  const fmMatch = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n/);
-  if (!fmMatch) return { frontMatter: {}, body: content };
+  const normalized = content.replace(/\r\n/g, '\n');
+  const fmMatch = normalized.match(/^---\s*\n([\s\S]*?)\n---\s*\n/);
+  if (!fmMatch) return { frontMatter: {}, body: normalized };
 
   const fmBlock = fmMatch[1];
-  const body = content.slice(fmMatch[0].length);
+  const body = normalized.slice(fmMatch[0].length);
   const frontMatter: FrontMatter = {};
 
   for (const line of fmBlock.split('\n')) {
@@ -128,7 +129,7 @@ export function parseMarkdownSpec(
 ): ParsedSection[] {
   const { frontMatter, body } = parseFrontMatter(markdown);
   const cleaned = stripTwoslash(body);
-  const lines = cleaned.split('\n');
+  const lines = cleaned.replace(/\r\n/g, '\n').split('\n');
 
   const sections: ParsedSection[] = [];
   const pathStack: Array<{ level: number; title: string }> = [];
