@@ -1,0 +1,29 @@
+{
+  "name": "langspec-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for programming language specification search and citation",
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "langspec-mcp": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "ingest": "node dist/index.js ingest",
+    "serve": "node dist/index.js serve"
+  },
+  "keywords": ["mcp", "language-spec", "search", "go", "specification"],
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "better-sqlite3": "^11.8.1",
+    "cheerio": "^1.0.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.2"
+  }
+}

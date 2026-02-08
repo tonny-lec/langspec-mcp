@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Edit(*)",
+      "Write(*)",
+      "Bash(npm *)",
+      "Bash(npx *)",
+      "Bash(node *)",
+      "Bash(git *)",
+      "Bash(mkdir *)",
+      "Bash(ls *)",
+      "Bash(sqlite3 *)",
+      "WebFetch(domain:*)",
+      "WebSearch"
+    ]
+  }
+}
