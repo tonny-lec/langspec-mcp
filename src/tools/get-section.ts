@@ -8,6 +8,7 @@ export interface SectionResult {
     excerpt: string;
     is_truncated: boolean;
     fulltext_available: boolean;
+    fulltext?: string;
   };
 }
 
@@ -23,6 +24,8 @@ export function getSection(
       `Section not found: ${params.language}/${params.version}/${params.section_id}`
     );
   }
+
+  const fulltextAvailable = section.source_policy === 'local_fulltext_ok';
 
   return {
     citation: {
@@ -43,7 +46,8 @@ export function getSection(
     content: {
       excerpt: section.excerpt,
       is_truncated: section.fulltext.length > section.excerpt.length,
-      fulltext_available: section.source_policy === 'local_fulltext_ok',
+      fulltext_available: fulltextAvailable,
+      ...(fulltextAvailable ? { fulltext: section.fulltext } : {}),
     },
   };
 }

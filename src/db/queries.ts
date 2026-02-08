@@ -1,6 +1,8 @@
 import type Database from 'better-sqlite3';
 import type { Section, Snapshot, Citation, VersionInfo } from '../types.js';
 
+export type UpsertResult = 'inserted' | 'updated' | 'unchanged';
+
 export class DatabaseQueries {
   constructor(private db: Database.Database) {}
 
@@ -39,12 +41,26 @@ export class DatabaseQueries {
   // Section Operations
   // ========================================
 
+  getSectionHash(language: string, doc: string, version: string, sectionId: string): string | undefined {
+    const row = this.db.prepare(`
+      SELECT content_hash FROM sections
+      WHERE language = ? AND doc = ? AND version = ? AND section_id = ?
+    `).get(language, doc, version, sectionId) as { content_hash: string } | undefined;
+    return row?.content_hash;
+  }
+
   upsertSection(s: {
     language: string; doc: string; version: string;
     section_id: string; title: string; section_path: string;
     canonical_url: string; excerpt: string; fulltext: string;
     content_hash: string; source_policy: string;
-  }): void {
+  }): UpsertResult {
+    const existingHash = this.getSectionHash(s.language, s.doc, s.version, s.section_id);
+
+    if (existingHash === s.content_hash) {
+      return 'unchanged';
+    }
+
     this.db.prepare(`
       INSERT INTO sections (
         language, doc, version, section_id, title, section_path,
@@ -62,6 +78,8 @@ export class DatabaseQueries {
       s.language, s.doc, s.version, s.section_id, s.title, s.section_path,
       s.canonical_url, s.excerpt, s.fulltext, s.content_hash, s.source_policy,
     );
+
+    return existingHash === undefined ? 'inserted' : 'updated';
   }
 
   getSection(language: string, version: string, sectionId: string): Section | undefined {
@@ -101,13 +119,11 @@ export class DatabaseQueries {
 
     args.push(params.limit);
 
-    // Note: snippet() is not available in FTS5 content-sync mode.
-    // We use the excerpt from the sections table instead.
     const sql = `
       SELECT
         s.language, s.doc, s.version, s.section_id,
         s.title, s.section_path, s.canonical_url,
-        s.excerpt, s.source_policy,
+        s.excerpt, s.fulltext, s.source_policy,
         bm25(fts_sections, 10.0, 5.0, 1.0) as score
       FROM fts_sections
       JOIN sections s ON s.id = fts_sections.rowid
@@ -119,26 +135,25 @@ export class DatabaseQueries {
     const rows = this.db.prepare(sql).all(...args) as Array<{
       language: string; doc: string; version: string; section_id: string;
       title: string; section_path: string; canonical_url: string;
-      excerpt: string; source_policy: string;
+      excerpt: string; fulltext: string; source_policy: string;
       score: number;
     }>;
 
-    return rows.map(r => ({
-      language: r.language,
-      doc: r.doc,
-      version: r.version,
-      section_id: r.section_id,
-      title: r.title,
-      section_path: r.section_path,
-      url: r.canonical_url,
-      snippet: {
-        text: r.excerpt.substring(0, 300),
-        start_char: 0,
-        end_char: Math.min(r.excerpt.length, 300),
-      },
-      source_policy: r.source_policy,
-      score: r.score,
-    }));
+    return rows.map(r => {
+      const snippet = extractRelevantSnippet(r.fulltext || r.excerpt, params.query);
+      return {
+        language: r.language,
+        doc: r.doc,
+        version: r.version,
+        section_id: r.section_id,
+        title: r.title,
+        section_path: r.section_path,
+        url: r.canonical_url,
+        snippet,
+        source_policy: r.source_policy,
+        score: r.score,
+      };
+    });
   }
 
   // ========================================
@@ -152,4 +167,61 @@ export class DatabaseQueries {
       ORDER BY language, doc
     `).all() as Array<{ language: string; doc: string }>;
   }
+}
+
+// ========================================
+// Snippet Extraction Helper
+// ========================================
+
+export function extractRelevantSnippet(
+  text: string,
+  query: string,
+  maxLen: number = 300,
+): { text: string; start_char: number; end_char: number } {
+  if (text.length <= maxLen) {
+    return { text, start_char: 0, end_char: text.length };
+  }
+
+  // Tokenize query: split on whitespace and remove FTS5 operators
+  const tokens = query
+    .split(/\s+/)
+    .filter(t => t.length > 0 && !['AND', 'OR', 'NOT', 'NEAR'].includes(t.toUpperCase()))
+    .map(t => t.replace(/[*"()]/g, ''))
+    .filter(t => t.length > 0);
+
+  // Find the earliest match position in the text
+  const lowerText = text.toLowerCase();
+  let bestPos = -1;
+
+  for (const token of tokens) {
+    const pos = lowerText.indexOf(token.toLowerCase());
+    if (pos !== -1 && (bestPos === -1 || pos < bestPos)) {
+      bestPos = pos;
+    }
+  }
+
+  // No match found — fall back to start
+  if (bestPos === -1) {
+    return {
+      text: text.substring(0, maxLen) + '...',
+      start_char: 0,
+      end_char: maxLen,
+    };
+  }
+
+  // Center the window around the match
+  const half = Math.floor(maxLen / 2);
+  let start = Math.max(0, bestPos - half);
+  let end = start + maxLen;
+
+  if (end > text.length) {
+    end = text.length;
+    start = Math.max(0, end - maxLen);
+  }
+
+  const snippetText = (start > 0 ? '...' : '') +
+    text.substring(start, end) +
+    (end < text.length ? '...' : '');
+
+  return { text: snippetText, start_char: start, end_char: end };
 }
