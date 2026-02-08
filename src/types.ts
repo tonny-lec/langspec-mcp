@@ -48,6 +48,23 @@ export interface FetchResult {
   etag: string | null;
   url: string;
   pageUrl?: string;
+  status: number;
+}
+
+export interface FetchError {
+  url: string;
+  error: string;
+}
+
+export interface FetchOutcome {
+  results: FetchResult[];
+  errors: FetchError[];
+  summary: {
+    total: number;
+    fetched: number;
+    cached: number;
+    failed: number;
+  };
 }
 
 export interface NormalizedSection {
