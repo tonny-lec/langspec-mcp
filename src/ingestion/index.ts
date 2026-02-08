@@ -24,11 +24,24 @@ export async function ingestSpec(db: Database.Database, language: string, cacheD
 
   // 2. Fetch all pages (with disk cache if cacheDir provided)
   const cache = cacheDir ? new DiskCache(cacheDir) : undefined;
-  const fetchResults = await fetchSpec(docConfig, { snapshotEtag, cache, language });
-  log.info('Fetched pages', { count: fetchResults.length });
+  const outcome = await fetchSpec(docConfig, { snapshotEtag, cache, language });
+
+  log.info('Fetch summary', outcome.summary);
+
+  // Report errors if any
+  if (outcome.errors.length > 0) {
+    for (const err of outcome.errors) {
+      log.warn('Page fetch failed', { url: err.url, error: err.error });
+    }
+  }
+
+  // All pages failed — abort
+  if (outcome.results.length === 0) {
+    throw new Error(`All ${outcome.summary.total} pages failed to fetch for ${language}`);
+  }
 
   // Check if all results are 304 (no changes)
-  const allUnchanged = fetchResults.every(r => r.status === 304);
+  const allUnchanged = outcome.results.every(r => r.status === 304);
   if (allUnchanged) {
     log.info('No changes detected (all 304), skipping parse and persist');
     return;
@@ -36,7 +49,7 @@ export async function ingestSpec(db: Database.Database, language: string, cacheD
 
   // 3. Parse + normalize pages with new content
   const allNormalized: import('../types.js').NormalizedSection[] = [];
-  for (const result of fetchResults) {
+  for (const result of outcome.results) {
     if (result.status === 304) continue;
     const parsedSections = parseSpec(result.html, docConfig, result.pageUrl);
     const normalized = normalizeSections(parsedSections, {
@@ -52,7 +65,7 @@ export async function ingestSpec(db: Database.Database, language: string, cacheD
 
   log.info('Total sections', { count: allNormalized.length });
 
-  // 3. Persist (transaction) with diff-based counting
+  // 4. Persist (transaction) with diff-based counting
   const counters: Record<UpsertResult, number> = {
     inserted: 0,
     updated: 0,
@@ -65,7 +78,7 @@ export async function ingestSpec(db: Database.Database, language: string, cacheD
       doc: docConfig.doc,
       version,
       fetched_at: new Date().toISOString(),
-      etag: fetchResults[0]?.etag ?? null,
+      etag: outcome.results[0]?.etag ?? null,
       source_url: docConfig.url ?? docConfig.indexUrl ?? `github:${docConfig.githubOwner}/${docConfig.githubRepo}`,
     });
 
@@ -77,7 +90,12 @@ export async function ingestSpec(db: Database.Database, language: string, cacheD
 
   transaction();
 
-  log.info('Summary', { inserted: counters.inserted, updated: counters.updated, unchanged: counters.unchanged });
+  log.info('Summary', {
+    inserted: counters.inserted,
+    updated: counters.updated,
+    unchanged: counters.unchanged,
+    failed_pages: outcome.errors.length,
+  });
   log.info('Completed successfully');
 }
 
