@@ -7,10 +7,11 @@ import { getDocConfig } from '../config/languages.js';
 import type { DocConfig } from '../config/languages.js';
 import type { UpsertResult } from '../db/queries.js';
 import { createLogger } from '../lib/logger.js';
+import { DiskCache } from '../lib/cache.js';
 
 const log = createLogger('Ingestion');
 
-export async function ingestSpec(db: Database.Database, language: string): Promise<void> {
+export async function ingestSpec(db: Database.Database, language: string, cacheDir?: string): Promise<void> {
   const docConfig = getDocConfig(language);
   log.info('Starting ingestion', { language, doc: docConfig.doc });
 
@@ -21,8 +22,9 @@ export async function ingestSpec(db: Database.Database, language: string): Promi
   const previousSnapshot = queries.getLatestSnapshot(language, docConfig.doc);
   const snapshotEtag = previousSnapshot?.etag ?? undefined;
 
-  // 2. Fetch all pages
-  const fetchResults = await fetchSpec(docConfig, snapshotEtag);
+  // 2. Fetch all pages (with disk cache if cacheDir provided)
+  const cache = cacheDir ? new DiskCache(cacheDir) : undefined;
+  const fetchResults = await fetchSpec(docConfig, { snapshotEtag, cache, language });
   log.info('Fetched pages', { count: fetchResults.length });
 
   // Check if all results are 304 (no changes)
