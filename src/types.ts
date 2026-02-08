@@ -48,6 +48,7 @@ export interface FetchResult {
   etag: string | null;
   url: string;
   pageUrl?: string;
+  status: number;
 }
 
 export interface NormalizedSection {

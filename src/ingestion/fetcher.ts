@@ -12,12 +12,28 @@ export function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function fetchUrl(url: string): Promise<{ body: string; etag: string | null }> {
+export interface FetchUrlResult {
+  body: string | null;
+  etag: string | null;
+  status: number;
+}
+
+async function fetchUrl(url: string, knownEtag?: string): Promise<FetchUrlResult> {
   return withRetry(async () => {
+    const headers: Record<string, string> = { 'User-Agent': USER_AGENT };
+    if (knownEtag) {
+      headers['If-None-Match'] = knownEtag;
+    }
+
     const response = await fetch(url, {
-      headers: { 'User-Agent': USER_AGENT },
+      headers,
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
+
+    if (response.status === 304) {
+      log.debug('Not modified (304)', { url });
+      return { body: null, etag: knownEtag ?? null, status: 304 };
+    }
 
     if (!response.ok) {
       const retryAfter = parseRetryAfter(response.headers.get('retry-after'));
@@ -31,16 +47,20 @@ async function fetchUrl(url: string): Promise<{ body: string; etag: string | nul
 
     const body = await response.text();
     const etag = response.headers.get('etag');
-    return { body, etag };
+    return { body, etag, status: 200 };
   });
 }
 
-async function fetchSingleHtml(config: DocConfig): Promise<FetchResult[]> {
+async function fetchSingleHtml(config: DocConfig, snapshotEtag?: string): Promise<FetchResult[]> {
   const url = config.url!;
   log.info('Fetching', { url });
-  const { body, etag } = await fetchUrl(url);
-  log.info('Fetched', { url, bytes: body.length, etag: etag ?? 'none' });
-  return [{ html: body, etag, url }];
+  const { body, etag, status } = await fetchUrl(url, snapshotEtag);
+  if (status === 304) {
+    log.info('Not modified, skipping', { url });
+    return [{ html: '', etag, url, status: 304 }];
+  }
+  log.info('Fetched', { url, bytes: body!.length, etag: etag ?? 'none' });
+  return [{ html: body!, etag, url, status: 200 }];
 }
 
 async function fetchMultiHtmlToc(config: DocConfig): Promise<FetchResult[]> {
@@ -51,7 +71,7 @@ async function fetchMultiHtmlToc(config: DocConfig): Promise<FetchResult[]> {
   const { body: indexHtml } = await fetchUrl(indexUrl);
 
   // Extract chapter links from the TOC page
-  const $ = load(indexHtml);
+  const $ = load(indexHtml!);
   const chapterLinks: string[] = [];
 
   $('a[href]').each((_, elem) => {
@@ -70,7 +90,7 @@ async function fetchMultiHtmlToc(config: DocConfig): Promise<FetchResult[]> {
     const chapterUrl = `${baseUrl}/${link}`;
     log.debug('Fetching chapter', { file: link });
     const { body, etag } = await fetchUrl(chapterUrl);
-    results.push({ html: body, etag, url: chapterUrl, pageUrl: chapterUrl });
+    results.push({ html: body ?? '', etag, url: chapterUrl, pageUrl: chapterUrl, status: body ? 200 : 304 });
     await delay(200);
   }
 
@@ -107,14 +127,14 @@ async function fetchGithubMarkdown(config: DocConfig): Promise<FetchResult[]> {
     const manifestUrl = `${rawBase}/${basePath}/${manifestFile}`;
     log.info('Fetching manifest', { url: manifestUrl });
     const { body: manifest } = await fetchUrl(manifestUrl);
-    mdFiles = parseSummaryMd(manifest, basePath);
+    mdFiles = parseSummaryMd(manifest!, basePath);
     log.info('Found files in manifest', { count: mdFiles.length });
   } else {
     // Use GitHub API to list files in directory
     const apiUrl = `https://api.github.com/repos/${githubOwner}/${githubRepo}/contents/${basePath}`;
     log.info('Listing files', { url: apiUrl });
     const { body } = await fetchUrl(apiUrl);
-    const entries = JSON.parse(body) as Array<{ name: string; path: string; type: string }>;
+    const entries = JSON.parse(body!) as Array<{ name: string; path: string; type: string }>;
     mdFiles = entries
       .filter(e => e.type === 'file' && e.name.endsWith('.md'))
       .map(e => e.path);
@@ -125,12 +145,13 @@ async function fetchGithubMarkdown(config: DocConfig): Promise<FetchResult[]> {
   for (const filePath of mdFiles) {
     const fileUrl = `${rawBase}/${filePath}`;
     log.debug('Fetching', { file: filePath });
-    const { body } = await fetchUrl(fileUrl);
+    const { body, etag } = await fetchUrl(fileUrl);
     results.push({
-      html: body,
-      etag: null,
+      html: body ?? '',
+      etag,
       url: fileUrl,
       pageUrl: filePath,
+      status: body ? 200 : 304,
     });
     await delay(100);
   }
@@ -138,10 +159,10 @@ async function fetchGithubMarkdown(config: DocConfig): Promise<FetchResult[]> {
   return results;
 }
 
-export async function fetchSpec(config: DocConfig): Promise<FetchResult[]> {
+export async function fetchSpec(config: DocConfig, snapshotEtag?: string): Promise<FetchResult[]> {
   switch (config.fetchStrategy) {
     case 'single-html':
-      return fetchSingleHtml(config);
+      return fetchSingleHtml(config, snapshotEtag);
     case 'multi-html-toc':
       return fetchMultiHtmlToc(config);
     case 'github-markdown':
