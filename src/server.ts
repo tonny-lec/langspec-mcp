@@ -12,6 +12,7 @@ import {
   GetSectionInputSchema,
   BuildLearningPlanInputSchema,
 } from './types.js';
+import { getSupportedLanguages } from './config/languages.js';
 import { listLanguages } from './tools/list-languages.js';
 import { listVersions } from './tools/list-versions.js';
 import { searchSpec } from './tools/search-spec.js';
@@ -23,6 +24,8 @@ export async function startServer(db: Database.Database): Promise<void> {
     { name: 'langspec-mcp', version: '1.0.0' },
     { capabilities: { tools: {} } },
   );
+
+  const languageEnum = getSupportedLanguages();
 
   // -- List Tools --
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
@@ -50,7 +53,7 @@ export async function startServer(db: Database.Database): Promise<void> {
           properties: {
             language: {
               type: 'string',
-              enum: ['go', 'java', 'rust', 'typescript'],
+              enum: languageEnum,
               description: 'Programming language',
             },
           },
@@ -73,7 +76,7 @@ export async function startServer(db: Database.Database): Promise<void> {
             query: { type: 'string', description: 'Search query' },
             language: {
               type: 'string',
-              enum: ['go', 'java', 'rust', 'typescript'],
+              enum: languageEnum,
               description: 'Programming language',
             },
             version: { type: 'string', description: 'Spec version (optional, defaults to latest)' },
@@ -105,7 +108,7 @@ export async function startServer(db: Database.Database): Promise<void> {
           properties: {
             language: {
               type: 'string',
-              enum: ['go', 'java', 'rust', 'typescript'],
+              enum: languageEnum,
               description: 'Programming language',
             },
             version: { type: 'string', description: 'Spec version' },
@@ -129,7 +132,7 @@ export async function startServer(db: Database.Database): Promise<void> {
           properties: {
             language: {
               type: 'string',
-              enum: ['go', 'java', 'rust', 'typescript'],
+              enum: languageEnum,
               description: 'Programming language',
             },
             version: { type: 'string', description: 'Spec version (optional, defaults to latest)' },

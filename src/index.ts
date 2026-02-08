@@ -6,12 +6,13 @@ import { mkdirSync } from 'node:fs';
 import { initializeDatabase } from './db/schema.js';
 import { ingestGoSpec } from './ingestion/index.js';
 import { startServer } from './server.js';
+import { getSupportedLanguages } from './config/languages.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DB_DIR = resolve(__dirname, '../data');
 const DB_PATH = resolve(DB_DIR, 'langspec.db');
 
-const SUPPORTED_LANGUAGES = ['go'];
+const SUPPORTED_LANGUAGES = getSupportedLanguages();
 
 function parseLanguageFlag(args: string[]): string {
   const idx = args.indexOf('--language');
