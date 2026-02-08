@@ -47,5 +47,12 @@ h2: "Types"                → path: "Types"
 - Present throughout the spec to indicate when features were introduced
 - Useful for version-aware searching
 
+## Section ID: stableId Fallback
+Not all headings in the Go spec have an `id` attribute. For headings without `id`:
+- Generate a stable hash from the heading text content
+- Format: `heading-<hash>` (e.g., `heading-a1b2c3d4`)
+- This ensures consistent section_id across re-ingestion runs
+- Implementation in `parser.ts`: check `elem.attribs.id` first, fall back to hash
+
 ## Canonical URL
 `https://go.dev/ref/spec#${anchor_id}`
