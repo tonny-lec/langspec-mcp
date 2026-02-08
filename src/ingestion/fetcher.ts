@@ -13,6 +13,17 @@ export function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+export function adaptDelay(currentDelayMs: number, error: unknown): number {
+  if (error instanceof FetchError && error.status === 429) {
+    const newDelay = error.retryAfter != null
+      ? error.retryAfter * 1000
+      : Math.min(currentDelayMs * 2, 10_000);
+    log.info('Rate limited, increasing delay', { previousMs: currentDelayMs, newMs: newDelay });
+    return newDelay;
+  }
+  return currentDelayMs;
+}
+
 export interface FetchUrlResult {
   body: string | null;
   etag: string | null;
@@ -144,6 +155,7 @@ async function fetchMultiHtmlToc(config: DocConfig, ctx?: CacheContext): Promise
   const results: FetchResult[] = [];
   const errors: FetchErrorType[] = [];
   let fetched = 0, cached = 0;
+  let delayMs = 200;
 
   for (let i = 0; i < chapterLinks.length; i++) {
     const link = chapterLinks[i];
@@ -158,8 +170,9 @@ async function fetchMultiHtmlToc(config: DocConfig, ctx?: CacheContext): Promise
       const msg = err instanceof Error ? err.message : String(err);
       log.warn('Failed to fetch page, continuing', { url: chapterUrl, error: msg });
       errors.push({ url: chapterUrl, error: msg });
+      delayMs = adaptDelay(delayMs, err);
     }
-    await delay(200);
+    await delay(delayMs);
   }
 
   return {
@@ -216,6 +229,7 @@ async function fetchGithubMarkdown(config: DocConfig, ctx?: CacheContext): Promi
   const results: FetchResult[] = [];
   const errors: FetchErrorType[] = [];
   let fetched = 0, cached = 0;
+  let delayMs = 100;
 
   for (let i = 0; i < mdFiles.length; i++) {
     const filePath = mdFiles[i];
@@ -236,8 +250,9 @@ async function fetchGithubMarkdown(config: DocConfig, ctx?: CacheContext): Promi
       const msg = err instanceof Error ? err.message : String(err);
       log.warn('Failed to fetch page, continuing', { url: fileUrl, error: msg });
       errors.push({ url: fileUrl, error: msg });
+      delayMs = adaptDelay(delayMs, err);
     }
-    await delay(100);
+    await delay(delayMs);
   }
 
   return {
