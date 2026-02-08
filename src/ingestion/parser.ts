@@ -2,6 +2,9 @@ import { load } from 'cheerio';
 import { createHash } from 'node:crypto';
 import type { ParsedSection } from '../types.js';
 import type { DocConfig } from '../config/languages.js';
+import { createLogger } from '../lib/logger.js';
+
+const log = createLogger('Parser');
 
 function stableId(baseUrl: string, headingText: string, index: number): string {
   const input = `${baseUrl}|${headingText}|${index}`;
@@ -71,7 +74,7 @@ export function parseHtmlSpec(
   });
 
   const label = pageUrl ? pageUrl.split('/').pop() : 'HTML';
-  console.error(`[Parser] Parsed ${sections.length} sections from ${label}`);
+  log.debug('Parsed sections', { source: label, count: sections.length });
   return sections;
 }
 
@@ -217,7 +220,7 @@ export function parseMarkdownSpec(
   }
 
   const label = pageUrl ? pageUrl.split('/').pop() : 'Markdown';
-  console.error(`[Parser] Parsed ${sections.length} sections from ${label}`);
+  log.debug('Parsed sections', { source: label, count: sections.length });
   return sections;
 }
 
