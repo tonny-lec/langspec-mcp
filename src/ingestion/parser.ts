@@ -154,8 +154,17 @@ export function parseMarkdownSpec(
     });
   }
 
+  let inFencedBlock = false;
+
   for (const line of lines) {
-    const headingMatch = line.match(/^(#{1,4})\s+(.+)$/);
+    // Track fenced code blocks (``` or ~~~) to avoid parsing headings inside them
+    if (/^(`{3,}|~{3,})/.test(line)) {
+      inFencedBlock = !inFencedBlock;
+      currentContent.push(line);
+      continue;
+    }
+
+    const headingMatch = !inFencedBlock && line.match(/^(#{1,4})\s+(.+)$/);
     if (headingMatch) {
       flushSection();
 

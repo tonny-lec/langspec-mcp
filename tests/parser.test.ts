@@ -266,6 +266,50 @@ This is the introduction to TypeScript.
 
     expect(sections[0].pageUrl).toBe('src/types.md');
   });
+
+  it('skips headings inside fenced code blocks', () => {
+    const md = [
+      '## Real Heading',
+      '',
+      'Some content.',
+      '',
+      '```rust',
+      '# fn main() {',
+      '#     println!("hidden");',
+      '# }',
+      '```',
+      '',
+      '## Another Heading',
+      '',
+      'More content.',
+    ].join('\n');
+
+    const sections = parseMarkdownSpec(md, rustConfig);
+
+    expect(sections).toHaveLength(2);
+    expect(sections[0].title).toBe('Real Heading');
+    expect(sections[0].content).toContain('# fn main()');
+    expect(sections[1].title).toBe('Another Heading');
+  });
+
+  it('skips headings inside tilde fenced code blocks', () => {
+    const md = [
+      '## Heading',
+      '',
+      '~~~',
+      '# not a heading',
+      '## also not a heading',
+      '~~~',
+      '',
+      'After fence.',
+    ].join('\n');
+
+    const sections = parseMarkdownSpec(md, rustConfig);
+
+    expect(sections).toHaveLength(1);
+    expect(sections[0].title).toBe('Heading');
+    expect(sections[0].content).toContain('# not a heading');
+  });
 });
 
 // ========================================
