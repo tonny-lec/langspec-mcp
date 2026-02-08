@@ -167,6 +167,46 @@ export class DatabaseQueries {
       ORDER BY language, doc
     `).all() as Array<{ language: string; doc: string }>;
   }
+
+  // ========================================
+  // Learning Plan Queries
+  // ========================================
+
+  getAllSectionsForPlan(language: string, version?: string): {
+    version: string;
+    sections: Array<{
+      section_id: string;
+      title: string;
+      section_path: string;
+      canonical_url: string;
+      fulltext_length: number;
+    }>;
+  } {
+    // Resolve version if not specified
+    let resolvedVersion = version;
+    if (!resolvedVersion) {
+      const latest = this.getLatestSnapshot(language, `${language}-spec`);
+      if (!latest) {
+        throw new Error(`No indexed data for language: ${language}`);
+      }
+      resolvedVersion = latest.version;
+    }
+
+    const sections = this.db.prepare(`
+      SELECT section_id, title, section_path, canonical_url, length(fulltext) as fulltext_length
+      FROM sections
+      WHERE language = ? AND version = ?
+      ORDER BY id ASC
+    `).all(language, resolvedVersion) as Array<{
+      section_id: string;
+      title: string;
+      section_path: string;
+      canonical_url: string;
+      fulltext_length: number;
+    }>;
+
+    return { version: resolvedVersion, sections };
+  }
 }
 
 // ========================================

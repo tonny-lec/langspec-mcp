@@ -122,3 +122,38 @@ export const GetSectionInputSchema = z.object({
   version: z.string(),
   section_id: z.string().min(1),
 });
+
+export const BuildLearningPlanInputSchema = z.object({
+  language: LanguageEnum,
+  version: z.string().optional(),
+  total_weeks: z.number().int().min(1).max(12).optional(),
+  focus_areas: z.array(z.string()).optional(),
+});
+
+// ========================================
+// Learning Plan Types
+// ========================================
+
+export interface LearningPlan {
+  language: string;
+  version: string;
+  total_weeks: number;
+  total_sections: number;
+  weeks: WeekPlan[];
+}
+
+export interface WeekPlan {
+  week: number;
+  theme: string;
+  sections: LearningPlanSection[];
+  estimated_minutes: number;
+}
+
+export interface LearningPlanSection {
+  section_id: string;
+  title: string;
+  section_path: string;
+  url: string;
+  depth: number;
+  content_length: number;
+}
