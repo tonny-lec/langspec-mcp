@@ -4,14 +4,15 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdirSync } from 'node:fs';
 import { initializeDatabase } from './db/schema.js';
-import { ingestGoSpec } from './ingestion/index.js';
+import { ingestSpec } from './ingestion/index.js';
 import { startServer } from './server.js';
+import { getSupportedLanguages } from './config/languages.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DB_DIR = resolve(__dirname, '../data');
 const DB_PATH = resolve(DB_DIR, 'langspec.db');
 
-const SUPPORTED_LANGUAGES = ['go'];
+const SUPPORTED_LANGUAGES = getSupportedLanguages();
 
 function parseLanguageFlag(args: string[]): string {
   const idx = args.indexOf('--language');
@@ -31,9 +32,24 @@ async function main(): Promise<void> {
     case 'ingest': {
       const language = parseLanguageFlag(process.argv.slice(3));
 
+      if (language === 'all') {
+        console.error(`[CLI] Ingesting all languages: ${SUPPORTED_LANGUAGES.join(', ')}`);
+        mkdirSync(DB_DIR, { recursive: true });
+        const db = initializeDatabase(DB_PATH);
+        try {
+          for (const lang of SUPPORTED_LANGUAGES) {
+            await ingestSpec(db, lang);
+          }
+        } finally {
+          db.close();
+        }
+        console.error('[CLI] All languages ingested');
+        break;
+      }
+
       if (!SUPPORTED_LANGUAGES.includes(language)) {
         console.error(`Error: Language '${language}' not yet supported.`);
-        console.error(`Supported languages: ${SUPPORTED_LANGUAGES.join(', ')}`);
+        console.error(`Supported languages: ${SUPPORTED_LANGUAGES.join(', ')}, all`);
         process.exit(1);
       }
 
@@ -41,7 +57,7 @@ async function main(): Promise<void> {
       mkdirSync(DB_DIR, { recursive: true });
       const db = initializeDatabase(DB_PATH);
       try {
-        await ingestGoSpec(db);
+        await ingestSpec(db, language);
       } finally {
         db.close();
       }
@@ -62,7 +78,7 @@ async function main(): Promise<void> {
       console.error('  langspec-mcp ingest [--language <lang>]  - Fetch and index spec (default: go)');
       console.error('  langspec-mcp serve                       - Start MCP server (stdio)');
       console.error('');
-      console.error(`Supported languages: ${SUPPORTED_LANGUAGES.join(', ')}`);
+      console.error(`Supported languages: ${SUPPORTED_LANGUAGES.join(', ')}, all`);
       process.exit(1);
     }
   }

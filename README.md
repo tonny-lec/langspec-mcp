@@ -6,20 +6,22 @@ Fetches official language specs, indexes them with SQLite FTS5, and exposes stru
 
 ## Features
 
+- **Multi-language support** — Go, Java, Rust, TypeScript indexed from official sources
 - **Full-text search** with BM25 ranking across language specification sections
 - **Structured citations** with section paths, canonical URLs, and contextual snippets
 - **Diff-based re-indexing** — only updates changed sections on re-ingestion
 - **Stable section IDs** — headings without HTML anchors get deterministic IDs
 - **Source policy control** — configurable excerpt-only or full-text access per language
+- **Weekly learning plans** — auto-generated study schedules from spec TOC
 
 ## Supported Languages
 
-| Language | Source | Status |
-|----------|--------|--------|
-| Go | [The Go Programming Language Specification](https://go.dev/ref/spec) | Available |
-| Java | JLS / JVMS | Planned (M4) |
-| Rust | The Rust Reference | Planned (M4) |
-| TypeScript | Handbook + ECMA-262 | Planned (M4) |
+| Language | Source | Sections | Strategy |
+|----------|--------|----------|----------|
+| Go | [The Go Programming Language Specification](https://go.dev/ref/spec) | ~162 | Single HTML |
+| Java | [The Java Language Specification (SE21)](https://docs.oracle.com/javase/specs/jls/se21/html/index.html) | ~575 | Multi-page HTML (19 chapters) |
+| Rust | [The Rust Reference](https://doc.rust-lang.org/reference/) | ~1,401 | GitHub Markdown (119 files) |
+| TypeScript | [TypeScript Handbook](https://www.typescriptlang.org/docs/handbook/) | ~178 | GitHub Markdown (10 files) |
 
 ## Quick Start
 
@@ -37,19 +39,20 @@ npm install
 npm run build
 ```
 
-### Index a Language Spec
+### Index Language Specs
 
 ```bash
 # Index Go specification (default)
 npm run ingest
 
-# Explicitly specify language
+# Specify a language
 npm run ingest -- --language go
-```
+npm run ingest -- --language rust
+npm run ingest -- --language java
+npm run ingest -- --language typescript
 
-Output:
-```
-[Ingestion] Summary: 162 inserted, 0 updated, 0 unchanged
+# Index all languages at once
+npm run ingest -- --language all
 ```
 
 ### Start the MCP Server
@@ -71,7 +74,12 @@ List all indexed languages and their documents.
 {}
 
 // Output
-[{ "language": "go", "docs": ["go-spec"] }]
+[
+  { "language": "go", "docs": ["go-spec"] },
+  { "language": "java", "docs": ["jls"] },
+  { "language": "rust", "docs": ["rust-reference"] },
+  { "language": "typescript", "docs": ["ts-handbook"] }
+]
 ```
 
 ### `list_versions`
@@ -128,6 +136,35 @@ Retrieve full details for a specific section.
 }
 ```
 
+### `build_learning_plan`
+
+Generate a weekly learning plan from the specification table of contents.
+
+```json
+// Input
+{
+  "language": "rust",
+  "total_weeks": 6,
+  "focus_areas": ["Types", "Traits"]
+}
+
+// Output
+{
+  "language": "rust",
+  "version": "snapshot-20260208",
+  "total_weeks": 6,
+  "total_sections": 1401,
+  "weeks": [
+    {
+      "week": 1,
+      "theme": "Introduction, Notation",
+      "sections": ["..."],
+      "estimated_minutes": 45
+    }
+  ]
+}
+```
+
 ## Claude Desktop Configuration
 
 Add to your `claude_desktop_config.json`:
@@ -147,6 +184,8 @@ Add to your `claude_desktop_config.json`:
 
 ```
 src/
+├── config/
+│   └── languages.ts      # LanguageConfig registry (4 languages)
 ├── index.ts              # CLI entry point (ingest / serve)
 ├── server.ts             # MCP server + tool registration
 ├── types.ts              # TypeScript types + Zod schemas
@@ -155,14 +194,15 @@ src/
 │   └── queries.ts        # Query methods + snippet extraction
 ├── ingestion/
 │   ├── index.ts          # Pipeline orchestrator
-│   ├── fetcher.ts        # HTTP fetch with ETag support
-│   ├── parser.ts         # HTML → structured sections (cheerio)
-│   └── normalizer.ts     # Section normalization + hashing
+│   ├── fetcher.ts        # Multi-strategy fetch (HTML / GitHub Markdown)
+│   ├── parser.ts         # HTML + Markdown → structured sections
+│   └── normalizer.ts     # Section normalization + canonical URLs
 └── tools/
     ├── list-languages.ts
     ├── list-versions.ts
     ├── search-spec.ts
-    └── get-section.ts
+    ├── get-section.ts
+    └── build-learning-plan.ts
 ```
 
 ## Tech Stack
@@ -182,6 +222,9 @@ npm run dev
 # Build
 npm run build
 
+# Run tests
+npm test
+
 # Re-index (diff-based — skips unchanged sections)
 npm run ingest
 ```
@@ -190,8 +233,8 @@ npm run ingest
 
 - [x] **M1**: Go spec + stdio MCP server + SQLite/FTS5
 - [x] **M2**: Citation precision (diff-based re-index, snippets, stable IDs, source policy)
-- [ ] **M3**: `build_learning_plan` tool (weekly study plans from TOC)
-- [ ] **M4**: Language expansion (Java, Rust, TypeScript)
+- [x] **M3**: `build_learning_plan` tool (weekly study plans from TOC)
+- [x] **M4**: Multi-language support (Go, Java, Rust, TypeScript)
 - [ ] **M5**: Non-functional (caching, rate limiting, observability, LAN auth)
 
 ## License

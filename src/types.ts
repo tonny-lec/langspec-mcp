@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { getSupportedLanguages } from './config/languages.js';
 
 // ========================================
 // Database Model Types
@@ -39,12 +40,14 @@ export interface ParsedSection {
   section_path: string;
   content: string;
   heading_level: number;
+  pageUrl?: string;
 }
 
 export interface FetchResult {
   html: string;
   etag: string | null;
   url: string;
+  pageUrl?: string;
 }
 
 export interface NormalizedSection {
@@ -98,7 +101,8 @@ export interface LanguageInfo {
 // MCP Tool Input Schemas (Zod)
 // ========================================
 
-const LanguageEnum = z.enum(['go', 'java', 'rust', 'typescript']);
+const supportedLanguages = getSupportedLanguages();
+const LanguageEnum = z.enum(supportedLanguages as [string, ...string[]]);
 
 export const ListLanguagesInputSchema = z.object({});
 

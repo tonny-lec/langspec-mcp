@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3';
 import { DatabaseQueries } from '../db/queries.js';
+import { getDocConfig } from '../config/languages.js';
 import type { Citation } from '../types.js';
 
 export function searchSpec(
@@ -20,7 +21,7 @@ export function searchSpec(
   // If no version, use latest snapshot
   let version = params.version;
   if (!version) {
-    const docName = params.filters?.doc ?? 'go-spec';
+    const docName = params.filters?.doc ?? getDocConfig(params.language).doc;
     const latest = queries.getLatestSnapshot(params.language, docName);
     if (!latest) {
       throw new Error(`No indexed data for language: ${params.language}`);
