@@ -73,4 +73,79 @@ describe('normalizeSections', () => {
 
     expect(result[0].source_policy).toBe('full_text');
   });
+
+  // ========================================
+  // Multi-page URL tests
+  // ========================================
+
+  it('builds canonical_url with pageUrl for multi-page HTML (Java)', () => {
+    const sections = [makeParsedSection({
+      section_id: 'jls-4.2.1',
+      pageUrl: 'https://docs.oracle.com/javase/specs/jls/se21/html/jls-4.html',
+    })];
+    const result = normalizeSections(sections, {
+      language: 'java',
+      doc: 'jls',
+      version: 'se21',
+      baseUrl: 'https://docs.oracle.com/javase/specs/jls/se21/html',
+    });
+
+    expect(result[0].canonical_url).toBe(
+      'https://docs.oracle.com/javase/specs/jls/se21/html/jls-4.html#jls-4.2.1'
+    );
+  });
+
+  it('builds canonical_url from GitHub markdown path (Rust)', () => {
+    const sections = [makeParsedSection({
+      section_id: 'boolean-type',
+      pageUrl: 'src/types.md',
+    })];
+    const result = normalizeSections(sections, {
+      language: 'rust',
+      doc: 'rust-reference',
+      version: 'snapshot-20260208',
+      baseUrl: 'https://doc.rust-lang.org/reference',
+      pageUrlPrefix: 'src',
+    });
+
+    expect(result[0].canonical_url).toBe(
+      'https://doc.rust-lang.org/reference/types.html#boolean-type'
+    );
+  });
+
+  it('handles nested markdown paths (Rust items/modules)', () => {
+    const sections = [makeParsedSection({
+      section_id: 'extern-crate-items',
+      pageUrl: 'src/items/modules.md',
+    })];
+    const result = normalizeSections(sections, {
+      language: 'rust',
+      doc: 'rust-reference',
+      version: 'snapshot-20260208',
+      baseUrl: 'https://doc.rust-lang.org/reference',
+      pageUrlPrefix: 'src',
+    });
+
+    expect(result[0].canonical_url).toBe(
+      'https://doc.rust-lang.org/reference/items/modules.html#extern-crate-items'
+    );
+  });
+
+  it('builds canonical_url for TypeScript Handbook from GitHub path', () => {
+    const sections = [makeParsedSection({
+      section_id: 'static-type-checking',
+      pageUrl: 'packages/documentation/copy/en/handbook-v2/Basics.md',
+    })];
+    const result = normalizeSections(sections, {
+      language: 'typescript',
+      doc: 'ts-handbook',
+      version: 'snapshot-20260208',
+      baseUrl: 'https://www.typescriptlang.org/docs/handbook/2',
+      pageUrlPrefix: 'packages/documentation/copy/en/handbook-v2',
+    });
+
+    expect(result[0].canonical_url).toBe(
+      'https://www.typescriptlang.org/docs/handbook/2/Basics.html#static-type-checking'
+    );
+  });
 });
