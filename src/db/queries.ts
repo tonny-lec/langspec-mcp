@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3';
 import type { Section, Snapshot, Citation, VersionInfo } from '../types.js';
+import { getDocConfig } from '../config/languages.js';
 
 export type UpsertResult = 'inserted' | 'updated' | 'unchanged';
 
@@ -185,7 +186,8 @@ export class DatabaseQueries {
     // Resolve version if not specified
     let resolvedVersion = version;
     if (!resolvedVersion) {
-      const latest = this.getLatestSnapshot(language, `${language}-spec`);
+      const docName = getDocConfig(language).doc;
+      const latest = this.getLatestSnapshot(language, docName);
       if (!latest) {
         throw new Error(`No indexed data for language: ${language}`);
       }
