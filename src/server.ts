@@ -5,6 +5,9 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import type Database from 'better-sqlite3';
+import { createLogger } from './lib/logger.js';
+
+const log = createLogger('Server');
 import {
   ListLanguagesInputSchema,
   ListVersionsInputSchema,
@@ -214,5 +217,5 @@ export async function startServer(db: Database.Database): Promise<void> {
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('[Server] langspec-mcp started via stdio');
+  log.info('langspec-mcp started via stdio');
 }

@@ -6,17 +6,20 @@ import { DatabaseQueries } from '../db/queries.js';
 import { getDocConfig } from '../config/languages.js';
 import type { DocConfig } from '../config/languages.js';
 import type { UpsertResult } from '../db/queries.js';
+import { createLogger } from '../lib/logger.js';
+
+const log = createLogger('Ingestion');
 
 export async function ingestSpec(db: Database.Database, language: string): Promise<void> {
   const docConfig = getDocConfig(language);
-  console.error(`[Ingestion] Starting ${language} ingestion (${docConfig.doc})...`);
+  log.info('Starting ingestion', { language, doc: docConfig.doc });
 
   const queries = new DatabaseQueries(db);
   const version = `snapshot-${new Date().toISOString().split('T')[0].replace(/-/g, '')}`;
 
   // 1. Fetch all pages
   const fetchResults = await fetchSpec(docConfig);
-  console.error(`[Ingestion] Fetched ${fetchResults.length} page(s)`);
+  log.info('Fetched pages', { count: fetchResults.length });
 
   // 2. Parse + normalize all pages
   const allNormalized: import('../types.js').NormalizedSection[] = [];
@@ -33,7 +36,7 @@ export async function ingestSpec(db: Database.Database, language: string): Promi
     allNormalized.push(...normalized);
   }
 
-  console.error(`[Ingestion] Total sections: ${allNormalized.length}`);
+  log.info('Total sections', { count: allNormalized.length });
 
   // 3. Persist (transaction) with diff-based counting
   const counters: Record<UpsertResult, number> = {
@@ -60,10 +63,8 @@ export async function ingestSpec(db: Database.Database, language: string): Promi
 
   transaction();
 
-  console.error(
-    `[Ingestion] Summary: ${counters.inserted} inserted, ${counters.updated} updated, ${counters.unchanged} unchanged`
-  );
-  console.error('[Ingestion] Completed successfully');
+  log.info('Summary', { inserted: counters.inserted, updated: counters.updated, unchanged: counters.unchanged });
+  log.info('Completed successfully');
 }
 
 // Backward compatibility

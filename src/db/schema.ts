@@ -1,5 +1,8 @@
 import Database from 'better-sqlite3';
 import { createHash } from 'node:crypto';
+import { createLogger } from '../lib/logger.js';
+
+const log = createLogger('DB');
 
 export const EXCERPT_MAX_LENGTH = 1200;
 
@@ -30,7 +33,7 @@ export function initializeDatabase(dbPath: string): Database.Database {
 }
 
 function applyV1(db: Database.Database): void {
-  console.error('[DB] Applying migration v1: initial schema');
+  log.info('Applying migration v1: initial schema');
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS snapshots (
@@ -95,7 +98,7 @@ function applyV1(db: Database.Database): void {
     INSERT OR IGNORE INTO schema_version (version) VALUES (1);
   `);
 
-  console.error('[DB] Migration v1 applied');
+  log.info('Migration v1 applied');
 }
 
 export function hashContent(content: string): string {

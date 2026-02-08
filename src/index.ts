@@ -7,6 +7,10 @@ import { initializeDatabase } from './db/schema.js';
 import { ingestSpec } from './ingestion/index.js';
 import { startServer } from './server.js';
 import { getSupportedLanguages } from './config/languages.js';
+import { createLogger, setLogLevel, parseLogLevel } from './lib/logger.js';
+
+setLogLevel(parseLogLevel(process.env.LOG_LEVEL));
+const log = createLogger('CLI');
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DB_DIR = resolve(__dirname, '../data');
@@ -19,7 +23,7 @@ function parseLanguageFlag(args: string[]): string {
   if (idx === -1) return 'go';
   const lang = args[idx + 1];
   if (!lang) {
-    console.error("Error: --language requires a value");
+    log.error('--language requires a value');
     process.exit(1);
   }
   return lang.toLowerCase();
@@ -33,7 +37,7 @@ async function main(): Promise<void> {
       const language = parseLanguageFlag(process.argv.slice(3));
 
       if (language === 'all') {
-        console.error(`[CLI] Ingesting all languages: ${SUPPORTED_LANGUAGES.join(', ')}`);
+        log.info('Ingesting all languages', { languages: SUPPORTED_LANGUAGES });
         mkdirSync(DB_DIR, { recursive: true });
         const db = initializeDatabase(DB_PATH);
         try {
@@ -43,17 +47,16 @@ async function main(): Promise<void> {
         } finally {
           db.close();
         }
-        console.error('[CLI] All languages ingested');
+        log.info('All languages ingested');
         break;
       }
 
       if (!SUPPORTED_LANGUAGES.includes(language)) {
-        console.error(`Error: Language '${language}' not yet supported.`);
-        console.error(`Supported languages: ${SUPPORTED_LANGUAGES.join(', ')}, all`);
+        log.error('Unsupported language', { language, supported: SUPPORTED_LANGUAGES });
         process.exit(1);
       }
 
-      console.error(`[CLI] Starting ingestion for language: ${language}`);
+      log.info('Starting ingestion', { language });
       mkdirSync(DB_DIR, { recursive: true });
       const db = initializeDatabase(DB_PATH);
       try {
@@ -61,7 +64,7 @@ async function main(): Promise<void> {
       } finally {
         db.close();
       }
-      console.error('[CLI] Done');
+      log.info('Done');
       break;
     }
 
@@ -74,17 +77,15 @@ async function main(): Promise<void> {
     }
 
     default: {
-      console.error('Usage:');
-      console.error('  langspec-mcp ingest [--language <lang>]  - Fetch and index spec (default: go)');
-      console.error('  langspec-mcp serve                       - Start MCP server (stdio)');
-      console.error('');
-      console.error(`Supported languages: ${SUPPORTED_LANGUAGES.join(', ')}, all`);
+      log.error('Unknown command. Usage: langspec-mcp ingest [--language <lang>] | serve', {
+        supported: SUPPORTED_LANGUAGES,
+      });
       process.exit(1);
     }
   }
 }
 
 main().catch((error) => {
-  console.error('[FATAL]', error);
+  log.error('Fatal error', { error: error instanceof Error ? error.message : String(error) });
   process.exit(1);
 });

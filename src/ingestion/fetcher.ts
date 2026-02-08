@@ -1,7 +1,9 @@
 import { load } from 'cheerio';
 import type { FetchResult } from '../types.js';
 import type { DocConfig } from '../config/languages.js';
+import { createLogger } from '../lib/logger.js';
 
+const log = createLogger('Fetcher');
 const USER_AGENT = 'langspec-mcp/1.0 (Language Specification Indexer)';
 
 function delay(ms: number): Promise<void> {
@@ -24,9 +26,9 @@ async function fetchUrl(url: string): Promise<{ body: string; etag: string | nul
 
 async function fetchSingleHtml(config: DocConfig): Promise<FetchResult[]> {
   const url = config.url!;
-  console.error(`[Fetcher] Fetching ${url}`);
+  log.info('Fetching', { url });
   const { body, etag } = await fetchUrl(url);
-  console.error(`[Fetcher] Fetched ${body.length} bytes, etag=${etag ?? 'none'}`);
+  log.info('Fetched', { url, bytes: body.length, etag: etag ?? 'none' });
   return [{ html: body, etag, url }];
 }
 
@@ -34,7 +36,7 @@ async function fetchMultiHtmlToc(config: DocConfig): Promise<FetchResult[]> {
   const indexUrl = config.indexUrl!;
   const baseUrl = indexUrl.replace(/\/[^/]*$/, '');
 
-  console.error(`[Fetcher] Fetching TOC from ${indexUrl}`);
+  log.info('Fetching TOC', { url: indexUrl });
   const { body: indexHtml } = await fetchUrl(indexUrl);
 
   // Extract chapter links from the TOC page
@@ -50,12 +52,12 @@ async function fetchMultiHtmlToc(config: DocConfig): Promise<FetchResult[]> {
     }
   });
 
-  console.error(`[Fetcher] Found ${chapterLinks.length} chapters`);
+  log.info('Found chapters', { count: chapterLinks.length });
 
   const results: FetchResult[] = [];
   for (const link of chapterLinks) {
     const chapterUrl = `${baseUrl}/${link}`;
-    console.error(`[Fetcher] Fetching chapter: ${link}`);
+    log.debug('Fetching chapter', { file: link });
     const { body, etag } = await fetchUrl(chapterUrl);
     results.push({ html: body, etag, url: chapterUrl, pageUrl: chapterUrl });
     await delay(200);
@@ -92,26 +94,26 @@ async function fetchGithubMarkdown(config: DocConfig): Promise<FetchResult[]> {
   if (manifestFile) {
     // Fetch SUMMARY.md or equivalent manifest
     const manifestUrl = `${rawBase}/${basePath}/${manifestFile}`;
-    console.error(`[Fetcher] Fetching manifest: ${manifestUrl}`);
+    log.info('Fetching manifest', { url: manifestUrl });
     const { body: manifest } = await fetchUrl(manifestUrl);
     mdFiles = parseSummaryMd(manifest, basePath);
-    console.error(`[Fetcher] Found ${mdFiles.length} files in manifest`);
+    log.info('Found files in manifest', { count: mdFiles.length });
   } else {
     // Use GitHub API to list files in directory
     const apiUrl = `https://api.github.com/repos/${githubOwner}/${githubRepo}/contents/${basePath}`;
-    console.error(`[Fetcher] Listing files from ${apiUrl}`);
+    log.info('Listing files', { url: apiUrl });
     const { body } = await fetchUrl(apiUrl);
     const entries = JSON.parse(body) as Array<{ name: string; path: string; type: string }>;
     mdFiles = entries
       .filter(e => e.type === 'file' && e.name.endsWith('.md'))
       .map(e => e.path);
-    console.error(`[Fetcher] Found ${mdFiles.length} markdown files`);
+    log.info('Found markdown files', { count: mdFiles.length });
   }
 
   const results: FetchResult[] = [];
   for (const filePath of mdFiles) {
     const fileUrl = `${rawBase}/${filePath}`;
-    console.error(`[Fetcher] Fetching: ${filePath}`);
+    log.debug('Fetching', { file: filePath });
     const { body } = await fetchUrl(fileUrl);
     results.push({
       html: body,
