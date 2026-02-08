@@ -15,6 +15,7 @@ const log = createLogger('CLI');
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DB_DIR = resolve(__dirname, '../data');
 const DB_PATH = resolve(DB_DIR, 'langspec.db');
+const CACHE_DIR = resolve(DB_DIR, 'cache');
 
 const SUPPORTED_LANGUAGES = getSupportedLanguages();
 
@@ -42,7 +43,7 @@ async function main(): Promise<void> {
         const db = initializeDatabase(DB_PATH);
         try {
           for (const lang of SUPPORTED_LANGUAGES) {
-            await ingestSpec(db, lang);
+            await ingestSpec(db, lang, CACHE_DIR);
           }
         } finally {
           db.close();
@@ -60,7 +61,7 @@ async function main(): Promise<void> {
       mkdirSync(DB_DIR, { recursive: true });
       const db = initializeDatabase(DB_PATH);
       try {
-        await ingestSpec(db, language);
+        await ingestSpec(db, language, CACHE_DIR);
       } finally {
         db.close();
       }

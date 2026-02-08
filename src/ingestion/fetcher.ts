@@ -3,6 +3,7 @@ import type { FetchResult } from '../types.js';
 import type { DocConfig } from '../config/languages.js';
 import { createLogger } from '../lib/logger.js';
 import { withRetry, FetchError, parseRetryAfter } from '../lib/retry.js';
+import type { DiskCache } from '../lib/cache.js';
 
 const log = createLogger('Fetcher');
 const USER_AGENT = 'langspec-mcp/1.0 (Language Specification Indexer)';
@@ -51,19 +52,62 @@ async function fetchUrl(url: string, knownEtag?: string): Promise<FetchUrlResult
   });
 }
 
-async function fetchSingleHtml(config: DocConfig, snapshotEtag?: string): Promise<FetchResult[]> {
+interface CacheContext {
+  cache: DiskCache;
+  language: string;
+  doc: string;
+}
+
+async function fetchWithCache(
+  url: string,
+  ctx?: CacheContext,
+): Promise<FetchUrlResult> {
+  const cachedEtag = ctx?.cache.getMeta(ctx.language, ctx.doc, url)?.etag ?? undefined;
+  const result = await fetchUrl(url, cachedEtag);
+
+  if (result.status === 304 && ctx) {
+    // Serve from cache
+    const cached = ctx.cache.getContent(ctx.language, ctx.doc, url);
+    if (cached != null) {
+      return { body: cached, etag: result.etag, status: 304 };
+    }
+    // Cache miss despite 304 — shouldn't happen, but fall through
+  }
+
+  if (result.status === 200 && result.body != null && ctx) {
+    ctx.cache.put(ctx.language, ctx.doc, url, result.body, result.etag);
+  }
+
+  return result;
+}
+
+async function fetchSingleHtml(config: DocConfig, snapshotEtag?: string, ctx?: CacheContext): Promise<FetchResult[]> {
   const url = config.url!;
   log.info('Fetching', { url });
-  const { body, etag, status } = await fetchUrl(url, snapshotEtag);
+  // For single-html, prefer snapshot ETag from DB, but also check cache
+  const cacheEtag = ctx?.cache.getMeta(ctx.language, ctx.doc, url)?.etag;
+  const etagToUse = snapshotEtag ?? cacheEtag ?? undefined;
+  const { body, etag, status } = await fetchUrl(url, etagToUse);
   if (status === 304) {
+    // Try to serve from cache if we have content
+    if (ctx) {
+      const cached = ctx.cache.getContent(ctx.language, ctx.doc, url);
+      if (cached != null) {
+        log.info('Not modified, serving from cache', { url });
+        return [{ html: cached, etag, url, status: 304 }];
+      }
+    }
     log.info('Not modified, skipping', { url });
     return [{ html: '', etag, url, status: 304 }];
+  }
+  if (ctx && body) {
+    ctx.cache.put(ctx.language, ctx.doc, url, body, etag);
   }
   log.info('Fetched', { url, bytes: body!.length, etag: etag ?? 'none' });
   return [{ html: body!, etag, url, status: 200 }];
 }
 
-async function fetchMultiHtmlToc(config: DocConfig): Promise<FetchResult[]> {
+async function fetchMultiHtmlToc(config: DocConfig, ctx?: CacheContext): Promise<FetchResult[]> {
   const indexUrl = config.indexUrl!;
   const baseUrl = indexUrl.replace(/\/[^/]*$/, '');
 
@@ -89,8 +133,8 @@ async function fetchMultiHtmlToc(config: DocConfig): Promise<FetchResult[]> {
   for (const link of chapterLinks) {
     const chapterUrl = `${baseUrl}/${link}`;
     log.debug('Fetching chapter', { file: link });
-    const { body, etag } = await fetchUrl(chapterUrl);
-    results.push({ html: body ?? '', etag, url: chapterUrl, pageUrl: chapterUrl, status: body ? 200 : 304 });
+    const result = await fetchWithCache(chapterUrl, ctx);
+    results.push({ html: result.body ?? '', etag: result.etag, url: chapterUrl, pageUrl: chapterUrl, status: result.status });
     await delay(200);
   }
 
@@ -115,7 +159,7 @@ export function parseSummaryMd(markdown: string, basePath: string): string[] {
   return files;
 }
 
-async function fetchGithubMarkdown(config: DocConfig): Promise<FetchResult[]> {
+async function fetchGithubMarkdown(config: DocConfig, ctx?: CacheContext): Promise<FetchResult[]> {
   const { githubOwner, githubRepo, githubPath, manifestFile } = config;
   const rawBase = `https://raw.githubusercontent.com/${githubOwner}/${githubRepo}/HEAD`;
   const basePath = githubPath ?? '';
@@ -145,13 +189,13 @@ async function fetchGithubMarkdown(config: DocConfig): Promise<FetchResult[]> {
   for (const filePath of mdFiles) {
     const fileUrl = `${rawBase}/${filePath}`;
     log.debug('Fetching', { file: filePath });
-    const { body, etag } = await fetchUrl(fileUrl);
+    const result = await fetchWithCache(fileUrl, ctx);
     results.push({
-      html: body ?? '',
-      etag,
+      html: result.body ?? '',
+      etag: result.etag,
       url: fileUrl,
       pageUrl: filePath,
-      status: body ? 200 : 304,
+      status: result.status,
     });
     await delay(100);
   }
@@ -159,14 +203,26 @@ async function fetchGithubMarkdown(config: DocConfig): Promise<FetchResult[]> {
   return results;
 }
 
-export async function fetchSpec(config: DocConfig, snapshotEtag?: string): Promise<FetchResult[]> {
+export interface FetchSpecOptions {
+  snapshotEtag?: string;
+  cache?: DiskCache;
+  language?: string;
+}
+
+export async function fetchSpec(config: DocConfig, opts: FetchSpecOptions = {}): Promise<FetchResult[]> {
+  const ctx = opts.cache && opts.language ? {
+    cache: opts.cache,
+    language: opts.language,
+    doc: config.doc,
+  } : undefined;
+
   switch (config.fetchStrategy) {
     case 'single-html':
-      return fetchSingleHtml(config, snapshotEtag);
+      return fetchSingleHtml(config, opts.snapshotEtag, ctx);
     case 'multi-html-toc':
-      return fetchMultiHtmlToc(config);
+      return fetchMultiHtmlToc(config, ctx);
     case 'github-markdown':
-      return fetchGithubMarkdown(config);
+      return fetchGithubMarkdown(config, ctx);
     default:
       throw new Error(`Unknown fetch strategy: ${config.fetchStrategy}`);
   }
