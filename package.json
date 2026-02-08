@@ -11,9 +11,17 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "ingest": "node dist/index.js ingest",
-    "serve": "node dist/index.js serve"
+    "serve": "node dist/index.js serve",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
-  "keywords": ["mcp", "language-spec", "search", "go", "specification"],
+  "keywords": [
+    "mcp",
+    "language-spec",
+    "search",
+    "go",
+    "specification"
+  ],
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
@@ -24,6 +32,7 @@
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.10.5",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^4.0.18"
   }
 }

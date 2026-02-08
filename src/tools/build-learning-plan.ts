@@ -2,7 +2,7 @@ import type Database from 'better-sqlite3';
 import { DatabaseQueries } from '../db/queries.js';
 import type { LearningPlan, WeekPlan, LearningPlanSection } from '../types.js';
 
-interface SectionRow {
+export interface SectionRow {
   section_id: string;
   title: string;
   section_path: string;
@@ -10,7 +10,7 @@ interface SectionRow {
   fulltext_length: number;
 }
 
-interface TopicGroup {
+export interface TopicGroup {
   topic: string;
   sections: LearningPlanSection[];
   totalChars: number;
@@ -50,7 +50,7 @@ export function buildLearningPlan(
   };
 }
 
-function groupByTopLevel(sections: SectionRow[]): TopicGroup[] {
+export function groupByTopLevel(sections: SectionRow[]): TopicGroup[] {
   const groupMap = new Map<string, TopicGroup>();
   const groupOrder: string[] = [];
 
@@ -85,7 +85,7 @@ function groupByTopLevel(sections: SectionRow[]): TopicGroup[] {
   return groupOrder.map(t => groupMap.get(t)!);
 }
 
-function reorderForFocus(
+export function reorderForFocus(
   groups: TopicGroup[],
   focusAreas?: string[],
 ): TopicGroup[] {
@@ -119,7 +119,7 @@ function reorderForFocus(
   return [...prereqGroups, ...focusGroups, ...rest];
 }
 
-function assignToWeeks(
+export function assignToWeeks(
   groups: TopicGroup[],
   totalWeeks: number,
 ): WeekPlan[] {
