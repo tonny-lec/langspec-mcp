@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { withRetry, FetchError, parseRetryAfter } from '../src/lib/retry.js';
+import { adaptDelay } from '../src/ingestion/fetcher.js';
 import { setLogLevel } from '../src/lib/logger.js';
 
 describe('withRetry', () => {
@@ -103,5 +104,30 @@ describe('parseRetryAfter', () => {
   it('returns 0 for past HTTP-date', () => {
     const pastDate = new Date(Date.now() - 60_000).toUTCString();
     expect(parseRetryAfter(pastDate)).toBe(0);
+  });
+});
+
+describe('adaptDelay', () => {
+  beforeEach(() => setLogLevel('error'));
+  afterEach(() => setLogLevel('info'));
+
+  it('increases delay on 429 with Retry-After', () => {
+    const err = new FetchError('429', 'http://x', 429, 5);
+    const newDelay = adaptDelay(100, err);
+    expect(newDelay).toBe(5000); // 5 seconds * 1000
+  });
+
+  it('doubles delay on 429 without Retry-After (capped at 10s)', () => {
+    const err = new FetchError('429', 'http://x', 429);
+    expect(adaptDelay(200, err)).toBe(400);
+    expect(adaptDelay(6000, err)).toBe(10_000); // capped
+  });
+
+  it('does not change delay for non-429 errors', () => {
+    const err = new FetchError('500', 'http://x', 500);
+    expect(adaptDelay(200, err)).toBe(200);
+
+    const typeErr = new TypeError('DNS failure');
+    expect(adaptDelay(200, typeErr)).toBe(200);
   });
 });
