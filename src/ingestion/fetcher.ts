@@ -143,7 +143,8 @@ async function fetchMultiHtmlToc(config: DocConfig, ctx?: CacheContext): Promise
 
   $('a[href]').each((_, elem) => {
     const href = $(elem).attr('href');
-    if (href && /^jls-\d+\.html$/.test(href)) {
+    const pattern = config.chapterPattern ?? /\.html$/;
+    if (href && pattern.test(href)) {
       if (!chapterLinks.includes(href)) {
         chapterLinks.push(href);
       }
@@ -200,6 +201,46 @@ export function parseSummaryMd(markdown: string, basePath: string): string[] {
   return files;
 }
 
+interface GitHubEntry {
+  name: string;
+  path: string;
+  type: string;
+}
+
+export async function recursiveListMarkdownFiles(
+  githubOwner: string,
+  githubRepo: string,
+  path: string,
+  excludePaths: string[],
+  delayMs: number,
+): Promise<string[]> {
+  const apiUrl = `https://api.github.com/repos/${githubOwner}/${githubRepo}/contents/${path}`;
+  log.debug('Listing directory', { url: apiUrl });
+  const { body } = await fetchUrl(apiUrl);
+  const entries = JSON.parse(body!) as GitHubEntry[];
+
+  const files: string[] = [];
+
+  for (const entry of entries) {
+    if (excludePaths.some(ep => entry.name === ep || entry.path === ep)) {
+      log.debug('Excluding path', { path: entry.path });
+      continue;
+    }
+
+    if (entry.type === 'file' && entry.name.endsWith('.md')) {
+      files.push(entry.path);
+    } else if (entry.type === 'dir') {
+      await delay(delayMs);
+      const subFiles = await recursiveListMarkdownFiles(
+        githubOwner, githubRepo, entry.path, excludePaths, delayMs,
+      );
+      files.push(...subFiles);
+    }
+  }
+
+  return files;
+}
+
 async function fetchGithubMarkdown(config: DocConfig, ctx?: CacheContext): Promise<FetchOutcome> {
   const { githubOwner, githubRepo, githubPath, manifestFile } = config;
   const rawBase = `https://raw.githubusercontent.com/${githubOwner}/${githubRepo}/HEAD`;
@@ -215,14 +256,11 @@ async function fetchGithubMarkdown(config: DocConfig, ctx?: CacheContext): Promi
     mdFiles = parseSummaryMd(manifest!, basePath);
     log.info('Found files in manifest', { count: mdFiles.length });
   } else {
-    // Use GitHub API to list files in directory
-    const apiUrl = `https://api.github.com/repos/${githubOwner}/${githubRepo}/contents/${basePath}`;
-    log.info('Listing files', { url: apiUrl });
-    const { body } = await fetchUrl(apiUrl);
-    const entries = JSON.parse(body!) as Array<{ name: string; path: string; type: string }>;
-    mdFiles = entries
-      .filter(e => e.type === 'file' && e.name.endsWith('.md'))
-      .map(e => e.path);
+    // Use GitHub API to list files in directory (recursive if needed)
+    const excludePaths = config.excludePaths ?? [];
+    mdFiles = await recursiveListMarkdownFiles(
+      githubOwner!, githubRepo!, basePath, excludePaths, 100,
+    );
     log.info('Found markdown files', { count: mdFiles.length });
   }
 

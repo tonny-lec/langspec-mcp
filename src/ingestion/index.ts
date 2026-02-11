@@ -59,6 +59,7 @@ export async function ingestSpec(db: Database.Database, language: string, cacheD
       baseUrl: docConfig.canonicalBaseUrl ?? docConfig.url ?? '',
       sourcePolicy: docConfig.sourcePolicy,
       pageUrlPrefix: docConfig.githubPath,
+      urlSuffix: docConfig.urlSuffix,
     });
     allNormalized.push(...normalized);
   }

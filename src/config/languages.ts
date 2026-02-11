@@ -19,6 +19,8 @@ export interface DocConfig {
   githubPath?: string;
   manifestFile?: string;
   canonicalBaseUrl?: string;
+  excludePaths?: string[];
+  urlSuffix?: string;
 }
 
 export interface LanguageConfig {
@@ -55,6 +57,7 @@ const LANGUAGES: LanguageConfig[] = [
         headingSelectors: 'h2, h3, h4',
         sourcePolicy: 'excerpt_only',
         canonicalBaseUrl: 'https://docs.oracle.com/javase/specs/jls/se21/html',
+        chapterPattern: /^jls-\d+\.html$/,
         notes: 'Oracle著作権のためexcerpt_only',
       },
     ],
@@ -89,6 +92,24 @@ const LANGUAGES: LanguageConfig[] = [
         githubPath: 'packages/documentation/copy/en/handbook-v2',
         sourcePolicy: 'local_fulltext_ok',
         notes: 'Handbookは完全な仕様書ではない（公式明記）',
+      },
+    ],
+  },
+  {
+    language: 'vitest',
+    displayName: 'Vitest',
+    docs: [
+      {
+        doc: 'vitest-docs',
+        displayName: 'Vitest Documentation',
+        fetchStrategy: 'github-markdown',
+        githubOwner: 'vitest-dev',
+        githubRepo: 'vitest',
+        githubPath: 'docs',
+        sourcePolicy: 'local_fulltext_ok',
+        canonicalBaseUrl: 'https://vitest.dev',
+        excludePaths: ['.vitepress', 'team', 'public'],
+        urlSuffix: '',
       },
     ],
   },

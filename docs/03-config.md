@@ -5,7 +5,8 @@
 - `LanguageConfig` と `DocConfig` の構造
 - 3つの取得戦略（FetchStrategy）の違い
 - `sourcePolicy` による著作権保護の仕組み
-- 新しい言語を追加する方法
+- 新しい言語・フレームワークを追加する方法
+- `excludePaths` / `urlSuffix` による汎用ドキュメント対応
 
 ## 設定レジストリとは
 
@@ -14,6 +15,7 @@
 - Go: 1ページのHTMLに全仕様が載っている
 - Java: 目次ページ + 複数の章ページに分かれている
 - Rust: GitHubリポジトリにMarkdownファイルが並んでいる
+- Vitest: GitHubリポジトリにネストされたサブディレクトリ構造のMarkdown
 
 これらの違いを吸収するために、各言語の設定を1つの配列 `LANGUAGES` に集約しています。
 
@@ -37,7 +39,7 @@ interface LanguageConfig {
 ### DocConfig — ドキュメントの定義
 
 ```typescript
-// src/config/languages.ts:3-22
+// src/config/languages.ts:3-24
 interface DocConfig {
   doc: string;                // ドキュメント識別子（例: 'go-spec'）
   displayName: string;        // 表示名
@@ -57,6 +59,8 @@ interface DocConfig {
   githubPath?: string;        // ファイルパス
   manifestFile?: string;      // マニフェストファイル（例: SUMMARY.md）
   canonicalBaseUrl?: string;  // 正規化URLのベース
+  excludePaths?: string[];    // 再帰探索で除外するパス（例: ['.vitepress', 'team']）
+  urlSuffix?: string;         // URL末尾（デフォルト '.html'、VitePress は ''）
 }
 ```
 
@@ -157,12 +161,15 @@ type FetchStrategy = 'single-html' | 'multi-html-toc' | 'github-markdown';
   └──────────┘
 ```
 
-**使用言語**: Rust, TypeScript
+**使用言語**: Rust, TypeScript, Vitest
 
-GitHubリポジトリ内のMarkdownファイル群を取得します。Rustは `SUMMARY.md`（マニフェストファイル）からファイル一覧を取得し、TypeScriptはGitHub APIでディレクトリ内容を取得します。
+GitHubリポジトリ内のMarkdownファイル群を取得します。ファイル一覧の取得方法は2通り:
+
+1. **マニフェストファイル方式** (`manifestFile` 指定時): `SUMMARY.md` などのマニフェストからファイル一覧を取得（Rust）
+2. **再帰的ディレクトリ探索** (`manifestFile` 未指定時): GitHub Contents API でディレクトリを再帰的に探索し、`.md` ファイルを収集。`excludePaths` で不要なディレクトリを除外可能（TypeScript, Vitest）
 
 ```typescript
-// src/config/languages.ts:63-77 (Rust の設定)
+// Rust の設定（マニフェスト方式）
 {
   language: 'rust',
   displayName: 'Rust',
@@ -180,6 +187,26 @@ GitHubリポジトリ内のMarkdownファイル群を取得します。Rustは `
 }
 ```
 
+```typescript
+// Vitest の設定（再帰的ディレクトリ探索 + VitePress clean URLs）
+{
+  language: 'vitest',
+  displayName: 'Vitest',
+  docs: [{
+    doc: 'vitest-docs',
+    displayName: 'Vitest Documentation',
+    fetchStrategy: 'github-markdown',
+    githubOwner: 'vitest-dev',
+    githubRepo: 'vitest',
+    githubPath: 'docs',
+    sourcePolicy: 'local_fulltext_ok',
+    canonicalBaseUrl: 'https://vitest.dev',
+    excludePaths: ['.vitepress', 'team', 'public'],  // ビルド設定・チームページ・静的アセットを除外
+    urlSuffix: '',                           // VitePress clean URLs (.html不要)
+  }],
+}
+```
+
 ## sourcePolicy — 著作権保護
 
 ```typescript
@@ -189,7 +216,7 @@ sourcePolicy: 'excerpt_only' | 'local_fulltext_ok'
 | ポリシー | 意味 | 対象 |
 |---------|------|------|
 | `excerpt_only` | 抜粋（最初の1200文字）のみ提供 | Go, Java（著作権保護） |
-| `local_fulltext_ok` | 全文を提供可能 | Rust, TypeScript（オープンソース） |
+| `local_fulltext_ok` | 全文を提供可能 | Rust, TypeScript, Vitest（オープンソース） |
 
 Go や Java の仕様書は著作権で保護されているため、AIに全文を渡すことは避け、抜粋と公式サイトへのリンクを提供します。Rust や TypeScript のドキュメントはオープンソースライセンスなので全文提供が可能です。
 
@@ -200,11 +227,11 @@ const fulltextAvailable = section.source_policy === 'local_fulltext_ok';
 // fulltext_available が false なら excerpt のみ返す
 ```
 
-## 新しい言語を追加する方法
+## 新しい言語・フレームワークを追加する方法
 
-新しい言語を追加するには、`src/config/languages.ts` の `LANGUAGES` 配列に1つエントリを追加するだけです。
+新しいドキュメントを追加するには、`src/config/languages.ts` の `LANGUAGES` 配列に1つエントリを追加するだけです。`language` フィールドはプログラミング言語だけでなく、フレームワークやツール（Vitest, Vite, React 等）にも使えます。
 
-例えば Python を追加する場合:
+### 例1: Python（single-html）
 
 ```typescript
 {
@@ -222,14 +249,35 @@ const fulltextAvailable = section.source_policy === 'local_fulltext_ok';
 }
 ```
 
-追加後は:
+### 例2: Vite（github-markdown + VitePress clean URLs）
+
+```typescript
+{
+  language: 'vite',
+  displayName: 'Vite',
+  docs: [{
+    doc: 'vite-docs',
+    displayName: 'Vite Documentation',
+    fetchStrategy: 'github-markdown',
+    githubOwner: 'vitejs',
+    githubRepo: 'vite',
+    githubPath: 'docs',
+    sourcePolicy: 'local_fulltext_ok',
+    canonicalBaseUrl: 'https://vite.dev',
+    excludePaths: ['.vitepress', 'blog'],
+    urlSuffix: '',   // VitePress clean URLs
+  }],
+}
+```
+
+### 追加後の手順
 
 ```bash
 npm run build                         # TypeScriptを再コンパイル
-npm run ingest -- --language python    # 新言語を取り込み
+npm run ingest -- --language vite     # 新ドキュメントを取り込み
 ```
 
-これだけで、MCPサーバの `list_languages` ツールに新しい言語が表示され、`search_spec` で検索できるようになります。コードの他の部分を変更する必要はありません。
+これだけで、MCPサーバの `list_languages` ツールに新しいエントリが表示され、`search_spec` で検索できるようになります。コードの他の部分を変更する必要はありません。
 
 ## ユーティリティ関数
 
@@ -240,7 +288,7 @@ npm run ingest -- --language python    # 新言語を取り込み
 getLanguageConfig('go')       // → LanguageConfig（言語全体の設定）
 getDocConfig('go')            // → DocConfig（最初のドキュメント設定）
 getDocConfig('go', 'go-spec') // → DocConfig（特定ドキュメント）
-getSupportedLanguages()       // → ['go', 'java', 'rust', 'typescript']
+getSupportedLanguages()       // → ['go', 'java', 'rust', 'typescript', 'vitest']
 getAllLanguageConfigs()        // → LanguageConfig[] (全設定)
 ```
 
@@ -249,8 +297,9 @@ getAllLanguageConfigs()        // → LanguageConfig[] (全設定)
 ## まとめ
 
 - 言語設定は `LANGUAGES` 配列に集約されている
-- 3つの取得戦略で異なる形式の仕様書に対応
+- 3つの取得戦略で異なる形式の仕様書・ドキュメントに対応
 - `sourcePolicy` で著作権保護レベルを制御
-- 新しい言語の追加は配列に1エントリ追加するだけ
+- `excludePaths` で不要なディレクトリを除外、`urlSuffix` で URL 形式を制御
+- 新しい言語やフレームワークの追加は配列に1エントリ追加するだけ
 
 次のドキュメント [04-ingestion-pipeline.md](./04-ingestion-pipeline.md) では、データ取り込みパイプラインの詳細を解説します。
