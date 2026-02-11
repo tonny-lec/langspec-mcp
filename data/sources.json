@@ -1,0 +1,50 @@
+[
+  {
+    "name": "go",
+    "displayName": "Go",
+    "doc": "go-spec",
+    "docDisplayName": "The Go Programming Language Specification",
+    "url": "https://go.dev/ref/spec",
+    "sourcePolicy": "excerpt_only"
+  },
+  {
+    "name": "java",
+    "displayName": "Java",
+    "doc": "jls",
+    "docDisplayName": "The Java Language Specification (SE21)",
+    "url": "https://docs.oracle.com/javase/specs/jls/se21/html/index.html",
+    "chapterPattern": "^jls-\\d+\\.html$",
+    "sourcePolicy": "excerpt_only",
+    "notes": "Oracle著作権のためexcerpt_only"
+  },
+  {
+    "name": "rust",
+    "displayName": "Rust",
+    "doc": "rust-reference",
+    "docDisplayName": "The Rust Reference",
+    "github": "rust-lang/reference",
+    "path": "src",
+    "manifestFile": "SUMMARY.md",
+    "canonicalBaseUrl": "https://doc.rust-lang.org/reference"
+  },
+  {
+    "name": "typescript",
+    "displayName": "TypeScript",
+    "doc": "ts-handbook",
+    "docDisplayName": "TypeScript Handbook",
+    "github": "microsoft/TypeScript-Website",
+    "path": "packages/documentation/copy/en/handbook-v2",
+    "notes": "Handbookは完全な仕様書ではない（公式明記）"
+  },
+  {
+    "name": "vitest",
+    "displayName": "Vitest",
+    "doc": "vitest-docs",
+    "docDisplayName": "Vitest Documentation",
+    "github": "vitest-dev/vitest",
+    "path": "docs",
+    "excludePaths": [".vitepress", "team", "public"],
+    "canonicalBaseUrl": "https://vitest.dev",
+    "urlSuffix": ""
+  }
+]

@@ -8,7 +8,8 @@
 - **M4完了**: 多言語対応 (Go, Java, Rust, TypeScript)
 - **M5完了**: NFR堅牢化 (構造化ログ, retry/timeout, ETag, disk cache, 部分失敗回復, adaptive rate limiting)
 - **M6完了**: Vitest ドキュメント対応 + 汎用IT技術ドキュメント取り込み (再帰ディレクトリ探索, excludePaths, urlSuffix, chapterPattern汎化)
-- ~3,900セクション indexed (Go 162, Java 575, Rust 1401, TypeScript 178, Vitest ~1587)、5 MCP tools稼働、112 tests
+- **M7完了**: 外部設定ファイル (`data/sources.json`) + DocSource 統一モデル (コード変更不要で新ドキュメント追加可能)
+- ~3,900セクション indexed (Go 162, Java 575, Rust 1401, TypeScript 178, Vitest ~1587)、5 MCP tools稼働、142+ tests
 
 ## Tech Stack
 - TypeScript (ES modules, `"type": "module"`, `"module": "Node16"`)
@@ -26,12 +27,18 @@
 
 ## File Structure
 ```
+data/
+├── sources.json         # External doc source config (add entries here, no rebuild needed)
+├── langspec.db          # SQLite database
+└── cache/               # ETag disk cache
 src/
 ├── index.ts             # CLI: ingest / serve (--language flag, LOG_LEVEL)
 ├── server.ts            # MCP Server + tool registration
 ├── types.ts             # TypeScript types + Zod schemas (FetchOutcome etc.)
 ├── config/
-│   └── languages.ts     # LanguageConfig registry (5 languages)
+│   ├── languages.ts     # LanguageConfig registry (lazy-loads from sources.json)
+│   ├── doc-source.ts    # DocSource type + Zod schema + resolveDocSource()
+│   └── source-loader.ts # loadSources() — reads & validates sources.json
 ├── db/
 │   ├── schema.ts        # DB init + migrations
 │   └── queries.ts       # DatabaseQueries + extractRelevantSnippet()
@@ -53,6 +60,13 @@ src/
 ```
 
 ## Key Patterns
+
+### External Config (M7)
+- ドキュメントソースは `data/sources.json` で定義（コード修正・再ビルド不要）
+- `DocSource` 統一モデル: `url` or `github` を指定、`fetchStrategy` は自動推論
+- `resolveDocSource()`: DocSource → DocConfig 変換（純粋関数）
+- `loadSources()`: JSON 読み込み → Zod バリデーション → LanguageConfig[] 生成
+- 新ソース追加: `data/sources.json` にエントリ追加 → `npm run ingest -- --language <name>`
 
 ### Diff-based Re-index
 - `content_hash` (SHA-256) で各セクションの変更を検出
