@@ -10,6 +10,7 @@ export function normalizeSections(
     baseUrl: string;
     sourcePolicy?: string;
     pageUrlPrefix?: string;
+    urlSuffix?: string;
   },
 ): NormalizedSection[] {
   const policy = meta.sourcePolicy ?? 'excerpt_only';
@@ -20,7 +21,7 @@ export function normalizeSections(
       ? fulltext.substring(0, EXCERPT_MAX_LENGTH) + '...'
       : fulltext;
 
-    const canonicalUrl = buildCanonicalUrl(meta.baseUrl, s.section_id, s.pageUrl, meta.pageUrlPrefix);
+    const canonicalUrl = buildCanonicalUrl(meta.baseUrl, s.section_id, s.pageUrl, meta.pageUrlPrefix, meta.urlSuffix);
 
     return {
       language: meta.language,
@@ -38,7 +39,7 @@ export function normalizeSections(
   });
 }
 
-function buildCanonicalUrl(baseUrl: string, sectionId: string, pageUrl?: string, pageUrlPrefix?: string): string {
+function buildCanonicalUrl(baseUrl: string, sectionId: string, pageUrl?: string, pageUrlPrefix?: string, urlSuffix?: string): string {
   if (!pageUrl) {
     // Single-page: baseUrl#sectionId (Go)
     return `${baseUrl}#${sectionId}`;
@@ -60,5 +61,6 @@ function buildCanonicalUrl(baseUrl: string, sectionId: string, pageUrl?: string,
   }
   pageName = pageName.replace(/\.md$/, '');
 
-  return `${baseUrl}/${pageName}.html#${sectionId}`;
+  const suffix = urlSuffix ?? '.html';
+  return `${baseUrl}/${pageName}${suffix}#${sectionId}`;
 }

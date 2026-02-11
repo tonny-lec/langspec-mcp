@@ -7,13 +7,14 @@ import {
 } from '../src/config/languages.js';
 
 describe('LanguageConfig registry', () => {
-  it('getSupportedLanguages returns all 4 languages', () => {
+  it('getSupportedLanguages returns all 5 languages', () => {
     const langs = getSupportedLanguages();
     expect(langs).toContain('go');
     expect(langs).toContain('java');
     expect(langs).toContain('rust');
     expect(langs).toContain('typescript');
-    expect(langs).toHaveLength(4);
+    expect(langs).toContain('vitest');
+    expect(langs).toHaveLength(5);
   });
 
   it('getLanguageConfig returns config for each language', () => {

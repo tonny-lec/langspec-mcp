@@ -7,7 +7,8 @@
 - **M3完了**: build_learning_plan tool (週間学習プラン自動生成)
 - **M4完了**: 多言語対応 (Go, Java, Rust, TypeScript)
 - **M5完了**: NFR堅牢化 (構造化ログ, retry/timeout, ETag, disk cache, 部分失敗回復, adaptive rate limiting)
-- ~2,316セクション indexed、5 MCP tools稼働、102 tests
+- **M6完了**: Vitest ドキュメント対応 + 汎用IT技術ドキュメント取り込み (再帰ディレクトリ探索, excludePaths, urlSuffix, chapterPattern汎化)
+- ~3,900セクション indexed (Go 162, Java 575, Rust 1401, TypeScript 178, Vitest ~1587)、5 MCP tools稼働、112 tests
 
 ## Tech Stack
 - TypeScript (ES modules, `"type": "module"`, `"module": "Node16"`)
@@ -30,7 +31,7 @@ src/
 ├── server.ts            # MCP Server + tool registration
 ├── types.ts             # TypeScript types + Zod schemas (FetchOutcome etc.)
 ├── config/
-│   └── languages.ts     # LanguageConfig registry (4 languages)
+│   └── languages.ts     # LanguageConfig registry (5 languages)
 ├── db/
 │   ├── schema.ts        # DB init + migrations
 │   └── queries.ts       # DatabaseQueries + extractRelevantSnippet()
